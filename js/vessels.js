@@ -1,41 +1,8 @@
-/** 상지 혈관 기본 도식. 화면 왼쪽 = 오른팔, 화면 오른쪽 = 왼팔. 위쪽 = 요골(엄지) 쪽.
+/** 상지 혈관 기본 도식. 화면 왼쪽 = 오른팔, 화면 오른쪽 = 왼팔. 바깥쪽 = 요골(엄지) 쪽.
  * 좌표는 assets/body-outline.png (583×419) 위에 맞춘다.
  */
 
 const CENTER = 583 / 2;
-
-const RT_AXIS = [
-  { x: 178, y: 168 },
-  { x: 160, y: 196 },
-  { x: 142, y: 224 },
-  { x: 122, y: 252 },
-  { x: 102, y: 280 },
-  { x: 82, y: 306 },
-  { x: 62, y: 330 },
-  { x: 48, y: 346 },
-];
-
-function offsetPath(points, amount) {
-  return points.map((point, index) => {
-    const prev = points[Math.max(0, index - 1)];
-    const next = points[Math.min(points.length - 1, index + 1)];
-    const dx = next.x - prev.x;
-    const dy = next.y - prev.y;
-    const length = Math.hypot(dx, dy) || 1;
-    return {
-      x: Math.round((point.x + (-dy / length) * amount) * 10) / 10,
-      y: Math.round((point.y + (dx / length) * amount) * 10) / 10,
-    };
-  });
-}
-
-function sliceAxis(start, end, amount) {
-  return offsetPath(RT_AXIS.slice(start, end), amount);
-}
-
-function elbowPoint(amount) {
-  return offsetPath(RT_AXIS.slice(3, 6), amount)[1];
-}
 
 function mirrorX(points) {
   return points.map((p) => ({ x: CENTER * 2 - p.x, y: p.y }));
@@ -57,34 +24,84 @@ function withHandles(raw) {
 
 const ARM = {
   rt: {
-    brachial: sliceAxis(1, 5, -1),
-    radial: sliceAxis(4, 8, 8),
+    // 동맥은 액와에서 상완으로 이어지고, 팔꿈치에서 요골(가쪽)과 척골(안쪽)로 갈라진다.
+    axillary: [
+      { x: 186, y: 166 },
+      { x: 174, y: 186 },
+      { x: 162, y: 206 },
+    ],
+    brachial: [
+      { x: 162, y: 206 },
+      { x: 146, y: 234 },
+      { x: 132, y: 260 },
+      { x: 118, y: 284 },
+    ],
+    radial: [
+      { x: 118, y: 284 },
+      { x: 96, y: 308 },
+      { x: 74, y: 326 },
+      { x: 52, y: 340 },
+    ],
+    ulnar: [
+      { x: 118, y: 284 },
+      { x: 110, y: 306 },
+      { x: 94, y: 324 },
+      { x: 74, y: 338 },
+    ],
+    // 얕은 정맥. 두정맥은 가쪽, 기저정맥은 안쪽, 정중주와정맥이 팔꿈치에서 둘을 잇는다.
+    cephalic: [
+      { x: 160, y: 172 },
+      { x: 142, y: 204 },
+      { x: 124, y: 234 },
+      { x: 106, y: 262 },
+      { x: 86, y: 292 },
+      { x: 66, y: 318 },
+      { x: 46, y: 338 },
+    ],
+    basilic: [
+      { x: 192, y: 180 },
+      { x: 174, y: 214 },
+      { x: 156, y: 246 },
+      { x: 142, y: 274 },
+      { x: 124, y: 304 },
+      { x: 102, y: 320 },
+      { x: 86, y: 334 },
+    ],
+    median: [
+      { x: 106, y: 262 },
+      { x: 124, y: 266 },
+      { x: 142, y: 274 },
+    ],
     subclavian: [
-      { x: 246, y: 86 },
-      { x: 228, y: 104 },
-      { x: 210, y: 130 },
+      { x: 196, y: 172 },
+      { x: 186, y: 186 },
+      { x: 176, y: 200 },
     ],
     "axillary-vein": [
-      { x: 210, y: 136 },
-      { x: 196, y: 154 },
-      { x: 184, y: 172 },
+      { x: 176, y: 200 },
+      { x: 168, y: 220 },
+      { x: 158, y: 238 },
     ],
-    "brachial-vein": sliceAxis(0, 5, -8),
-    cephalic: sliceAxis(0, 8, 13),
-    basilic: sliceAxis(1, 7, -13),
-    median: [elbowPoint(13), elbowPoint(-13)],
+    "brachial-vein": [
+      { x: 158, y: 238 },
+      { x: 146, y: 258 },
+      { x: 134, y: 276 },
+      { x: 122, y: 292 },
+    ],
   },
 };
 
 const CATALOG = [
-  { key: "brachial", code: "A", name: "Brachial artery", kind: "artery", color: "#c0392b", diameter: 5 },
-  { key: "radial", code: "B", name: "Radial artery", kind: "artery", color: "#e74c3c", diameter: 2.5 },
-  { key: "subclavian", code: "C", name: "Subclavian vein", kind: "vein", color: "#1a365d", diameter: 8 },
-  { key: "axillary-vein", code: "D", name: "Axillary vein", kind: "vein", color: "#2471a3", diameter: 6 },
-  { key: "brachial-vein", code: "E", name: "Brachial vein", kind: "vein", color: "#3498db", diameter: 4 },
-  { key: "cephalic", code: "F", name: "Cephalic vein", kind: "vein", color: "#2e86c1", diameter: 3 },
-  { key: "basilic", code: "G", name: "Basilic vein", kind: "vein", color: "#1a5276", diameter: 4 },
-  { key: "median", code: "H", name: "Median cubital vein", kind: "vein", color: "#5dade2", diameter: 3 },
+  { key: "axillary", code: "A", name: "Axillary artery", kind: "artery", color: "#c0392b", diameter: 5, visible: true, labelAt: 0, labelDy: -2 },
+  { key: "brachial", code: "B", name: "Brachial artery", kind: "artery", color: "#e74c3c", diameter: 4.5, visible: true, labelAt: 1, labelDy: -4 },
+  { key: "radial", code: "C", name: "Radial artery", kind: "artery", color: "#e74c3c", diameter: 2.5, visible: true, labelAt: 2, labelDy: -2 },
+  { key: "ulnar", code: "D", name: "Ulnar artery", kind: "artery", color: "#c0392b", diameter: 2.5, visible: true, labelAt: 2, labelDy: 8 },
+  { key: "cephalic", code: "E", name: "Cephalic vein", kind: "vein", color: "#2e86c1", diameter: 3, visible: true, labelAt: 1, labelDy: -10 },
+  { key: "basilic", code: "F", name: "Basilic vein", kind: "vein", color: "#1a5276", diameter: 3.5, visible: true, labelAt: 2, labelDy: 8 },
+  { key: "median", code: "G", name: "Median cubital vein", kind: "vein", color: "#5dade2", diameter: 2.5, visible: true, labelAt: 1, labelDy: -8 },
+  { key: "brachial-vein", code: "H", name: "Brachial vein", kind: "vein", color: "#3498db", diameter: 3.5, visible: false, labelAt: 1, labelDy: 6 },
+  { key: "axillary-vein", code: "I", name: "Axillary vein", kind: "vein", color: "#2471a3", diameter: 5, visible: false, labelAt: 0, labelDy: 8 },
+  { key: "subclavian", code: "J", name: "Subclavian vein", kind: "vein", color: "#1a365d", diameter: 6, visible: false, labelAt: 0, labelDy: -6 },
 ];
 
 const KOREAN_NAMES = {
@@ -100,7 +117,29 @@ const KOREAN_NAMES = {
   "쇄골하정맥": "Subclavian vein",
 };
 
-const REMOVED_IDS = ["rt-axillary", "lt-axillary", "rt-ulnar", "lt-ulnar"];
+const OLD_RT = {
+  brachial: [[160.8, 196.5], [142.8, 224.6], [122.8, 252.6], [102.8, 280.6]],
+  radial: [[95.7, 275.1], [75.8, 301], [55.9, 324.8], [42, 340.7]],
+  subclavian: [[246, 86], [228, 104], [210, 130]],
+  "axillary-vein": [[210, 136], [196, 154], [184, 172]],
+  "brachial-vein": [[184.7, 172.3], [166.7, 200.3], [148.6, 228.5], [128.5, 256.6], [108.5, 284.6]],
+  cephalic: [[167.1, 161], [149.1, 189], [131.2, 216.7], [111.4, 244.4], [91.6, 272.3], [71.8, 297.9], [52.1, 321.6], [38.2, 337.4]],
+  basilic: [[170.9, 203], [152.8, 231.3], [132.6, 259.6], [112.4, 287.7], [92.2, 314.1], [72, 338.3]],
+  median: [[91.6, 272.3], [112.4, 287.7]],
+};
+
+function oldCourse(id) {
+  const key = id.slice(3);
+  const raw = OLD_RT[key];
+  if (!raw || (id.slice(0, 3) !== "rt-" && id.slice(0, 3) !== "lt-")) return null;
+  if (id.startsWith("rt-")) return raw;
+  return raw.map(([x, y]) => [CENTER * 2 - x, y]);
+}
+
+function sameCourse(points, raw) {
+  if (!points || !raw || points.length !== raw.length) return false;
+  return points.every((point, index) => Math.hypot(point.x - raw[index][0], point.y - raw[index][1]) < 1.5);
+}
 
 export function createDefaultVessels() {
   const vessels = [];
@@ -116,9 +155,11 @@ export function createDefaultVessels() {
         name: spec.name,
         kind: spec.kind,
         color: spec.color,
-        visible: false,
+        visible: spec.visible,
         diameter: spec.diameter,
         style: "normal",
+        labelAt: spec.labelAt,
+        labelDy: spec.labelDy,
         points: withHandles(raw),
       });
     }
@@ -138,26 +179,21 @@ export function useEnglishNames(vessels) {
 }
 
 export function syncCatalog(vessels) {
-  const removed = new Set(REMOVED_IDS);
-  let grew = true;
-  while (grew) {
-    grew = false;
-    for (const vessel of vessels) {
-      if (vessel.parentId && removed.has(vessel.parentId) && !removed.has(vessel.id)) {
-        removed.add(vessel.id);
-        grew = true;
-      }
-    }
-  }
   const byId = new Map();
-  for (const vessel of vessels) {
-    if (!removed.has(vessel.id)) byId.set(vessel.id, vessel);
-  }
+  for (const vessel of vessels) byId.set(vessel.id, vessel);
   const result = [];
   for (const fresh of createDefaultVessels()) {
     const existing = byId.get(fresh.id);
     if (existing) {
+      if (sameCourse(existing.points, oldCourse(fresh.id))) {
+        existing.points = fresh.points;
+        existing.visible = fresh.visible;
+        existing.diameter = fresh.diameter;
+        existing.color = fresh.color;
+      }
       existing.code = fresh.code;
+      existing.labelAt = fresh.labelAt;
+      existing.labelDy = fresh.labelDy;
       result.push(existing);
       byId.delete(fresh.id);
     } else {
