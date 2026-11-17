@@ -112,6 +112,10 @@ svg#map {
   touch-action: none;
 }
 
+svg#map.branch-mode {
+  cursor: crosshair;
+}
+
 .group-title {
   margin: 12px 0 6px;
   font-size: 12px;
@@ -126,6 +130,11 @@ svg#map {
   gap: 6px;
   align-items: center;
   margin-bottom: 6px;
+}
+
+.vessel-row.branch-row {
+  width: calc(100% - 16px);
+  margin-left: 16px;
 }
 
 .vessel-check {

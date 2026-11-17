@@ -1,4 +1,4 @@
-import { BODY_IMAGE, MAP_HEIGHT, MAP_WIDTH, cloneVessels, createDefaultVessels, useEnglishNames } from "./vessels.js";
+import { BODY_IMAGE, MAP_HEIGHT, MAP_WIDTH, cloneVessels, closestOnPath, createDefaultVessels, curvePoint, curveTangent, pointAlong, useEnglishNames } from "./vessels.js";
 import { clearState, loadState, saveState } from "./storage.js";
 
 const svg = document.querySelector("#map");
@@ -83,6 +83,152 @@ function vesselById(id) {
   return state.vessels.find((vessel) => vessel.id === id);
 }
 
+function isShown(vessel, seen = new Set()) {
+  if (!vessel || seen.has(vessel.id) || !vessel.visible) return false;
+  if (!vessel.parentId) return true;
+  seen.add(vessel.id);
+  return isShown(vesselById(vessel.parentId), seen);
+}
+
+function descendantIds(id) {
+  const ids = [];
+  const queue = [id];
+  while (queue.length) {
+    const current = queue.shift();
+    for (const vessel of state.vessels) {
+      if (vessel.parentId === current) {
+        ids.push(vessel.id);
+        queue.push(vessel.id);
+      }
+    }
+  }
+  return ids;
+}
+
+function vesselsInOrder(side) {
+  const rows = [];
+  const visit = (vessel, depth) => {
+    rows.push({ vessel, depth });
+    for (const child of state.vessels) {
+      if (child.parentId === vessel.id) visit(child, depth + 1);
+    }
+  };
+  for (const vessel of state.vessels) {
+    if (vessel.side === side && !vessel.parentId) visit(vessel, 0);
+  }
+  return rows;
+}
+
+function syncJunctions() {
+  for (let pass = 0; pass < 6; pass += 1) {
+    for (const vessel of state.vessels) {
+      if (!vessel.junction || !vessel.parentId || vessel.points.length < 1) continue;
+      const parent = vesselById(vessel.parentId);
+      if (!parent || parent.points.length < 2) continue;
+      const segment = Math.max(0, Math.min(parent.points.length - 2, vessel.junction.segment | 0));
+      const t = Math.min(1, Math.max(0, Number(vessel.junction.t) || 0));
+      vessel.junction.segment = segment;
+      vessel.junction.t = t;
+      const point = curvePoint(parent.points[segment], parent.points[segment + 1], t);
+      vessel.points[0].x = point.x;
+      vessel.points[0].y = point.y;
+    }
+  }
+}
+
+function tangentAt(parent, junction) {
+  if (!parent || !junction || parent.points.length < 2) return { x: 0, y: 1 };
+  const segment = Math.max(0, Math.min(parent.points.length - 2, junction.segment | 0));
+  const t = Math.min(1, Math.max(0, Number(junction.t) || 0));
+  return curveTangent(parent.points[segment], parent.points[segment + 1], t);
+}
+
+function perpendicularAway(hit) {
+  const length = Math.hypot(hit.tangent.x, hit.tangent.y) || 1;
+  let nx = -hit.tangent.y / length;
+  let ny = hit.tangent.x / length;
+  const away = hit.x - MAP_WIDTH / 2;
+  if (nx * away < 0) {
+    nx = -nx;
+    ny = -ny;
+  }
+  if (Math.abs(nx * away) < 0.5 && ny > 0) {
+    nx = -nx;
+    ny = -ny;
+  }
+  if (Math.hypot(nx, ny) < 0.001) return { x: hit.x < MAP_WIDTH / 2 ? -1 : 1, y: 0 };
+  return { x: nx, y: ny };
+}
+
+function aimOutward(vessel) {
+  const origin = vessel.points[0];
+  const tip = vessel.points[vessel.points.length - 1];
+  const dx = tip.x - origin.x;
+  const dy = tip.y - origin.y;
+  const length = Math.hypot(dx, dy) || 1;
+  origin.hx = (dx / length) * Math.min(18, length * 0.35);
+  origin.hy = (dy / length) * Math.min(18, length * 0.35);
+  tip.hx = (dx / length) * Math.min(14, length * 0.25);
+  tip.hy = (dy / length) * Math.min(14, length * 0.25);
+}
+
+function nextBranchName(parentId) {
+  const names = new Set(state.vessels.filter((vessel) => vessel.parentId === parentId).map((vessel) => vessel.name));
+  if (!names.has("Branch")) return "Branch";
+  let index = 2;
+  while (names.has(`Branch ${index}`)) index += 1;
+  return `Branch ${index}`;
+}
+
+function buildBranch(parent, hit) {
+  const direction = perpendicularAway(hit);
+  return {
+    id: `br-${Date.now().toString(36)}-${Math.floor(Math.random() * 10000)}`,
+    parentId: parent.id,
+    junction: { segment: hit.segment, t: Math.round(hit.t * 1000) / 1000 },
+    side: parent.side,
+    sideName: parent.sideName,
+    code: "Br",
+    name: nextBranchName(parent.id),
+    kind: parent.kind,
+    color: parent.color,
+    visible: true,
+    diameter: Math.max(0.8, Math.round(parent.diameter * 0.55 * 10) / 10),
+    style: "normal",
+    points: [
+      { x: hit.x, y: hit.y, hx: direction.x * 14, hy: direction.y * 14 },
+      { x: hit.x, y: hit.y, hx: direction.x * 10, hy: direction.y * 10 },
+    ],
+  };
+}
+
+function setVisible(vessel, visible) {
+  vessel.visible = visible;
+  if (visible) {
+    let parent = vesselById(vessel.parentId);
+    const seen = new Set([vessel.id]);
+    while (parent && !seen.has(parent.id)) {
+      seen.add(parent.id);
+      parent.visible = true;
+      parent = vesselById(parent.parentId);
+    }
+    return;
+  }
+  for (const id of descendantIds(vessel.id)) {
+    const child = vesselById(id);
+    if (child) child.visible = false;
+  }
+}
+
+function removeVessel(id) {
+  const ids = new Set([id, ...descendantIds(id)]);
+  state.vessels = state.vessels.filter((vessel) => !ids.has(vessel.id));
+  if (ids.has(state.selectedVesselId)) {
+    state.selectedVesselId = null;
+    state.selectedPoint = null;
+  }
+}
+
 function defaultById(id) {
   return defaults.find((vessel) => vessel.id === id);
 }
@@ -128,9 +274,14 @@ function renderList() {
     title.className = "group-title";
     title.textContent = side === "rt" ? "오른팔 (화면 왼쪽)" : "왼팔 (화면 오른쪽)";
     listEl.append(title);
-    for (const vessel of state.vessels.filter((item) => item.side === side)) {
+    for (const { vessel, depth } of vesselsInOrder(side)) {
       const row = document.createElement("div");
       row.className = "vessel-row";
+      if (depth > 0) {
+        row.classList.add("branch-row");
+        row.style.marginLeft = `${16 * depth}px`;
+        row.style.width = `calc(100% - ${16 * depth}px)`;
+      }
       if (!vessel.visible) row.classList.add("hidden-vessel");
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
@@ -138,7 +289,7 @@ function renderList() {
       checkbox.checked = vessel.visible;
       checkbox.setAttribute("aria-label", `${vessel.sideName} ${vessel.name} 표시`);
       checkbox.addEventListener("change", () => {
-        vessel.visible = checkbox.checked;
+        setVisible(vessel, checkbox.checked);
         if (checkbox.checked) {
           state.selectedVesselId = vessel.id;
           state.selectedMarkerId = null;
@@ -175,18 +326,21 @@ function renderList() {
 }
 
 function renderVessels() {
+  syncJunctions();
   vesselLayer.replaceChildren();
   labelLayer.replaceChildren();
   for (const vessel of state.vessels) {
-    if (!vessel.visible) continue;
+    if (!isShown(vessel)) continue;
     const d = curvePath(vessel.points);
     const hit = document.createElementNS("http://www.w3.org/2000/svg", "path");
     hit.setAttribute("d", d);
     hit.setAttribute("fill", "none");
     hit.setAttribute("stroke", "transparent");
-    hit.setAttribute("stroke-width", String(Math.max(16, strokeWidth(vessel) + 10)));
+    const hitWidth = state.mode === "branch" ? Math.max(22, strokeWidth(vessel) + 14) : Math.max(16, strokeWidth(vessel) + 10);
+    hit.setAttribute("stroke-width", String(hitWidth));
+    if (vessel.parentId) hit.dataset.branchOf = vessel.parentId;
     hit.dataset.vessel = vessel.id;
-    hit.style.cursor = "pointer";
+    hit.style.cursor = state.mode === "branch" ? "crosshair" : "pointer";
     const visual = document.createElementNS("http://www.w3.org/2000/svg", "path");
     visual.setAttribute("d", d);
     visual.setAttribute("fill", "none");
@@ -203,13 +357,23 @@ function renderVessels() {
     visual.setAttribute("pointer-events", "none");
     vesselLayer.append(hit, visual);
 
-    const end = vessel.points[Math.max(0, vessel.points.length - 2)];
-    const outward = vessel.side === "rt" ? -1 : 1;
-    const stack = { A: -7, B: 0, C: -9, D: 6, E: -12, F: 8, G: 2 }[vessel.code] || 0;
+    const tip = vessel.points[vessel.points.length - 1];
+    const beforeTip = vessel.points[Math.max(0, vessel.points.length - 2)];
     const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    text.setAttribute("x", String(end.x + outward * 4));
-    text.setAttribute("y", String(end.y + stack));
-    text.setAttribute("text-anchor", vessel.side === "rt" ? "end" : "start");
+    if (vessel.parentId) {
+      const dx = tip.x - beforeTip.x;
+      const dy = tip.y - beforeTip.y;
+      const length = Math.hypot(dx, dy) || 1;
+      text.setAttribute("x", String(tip.x + (dx / length) * 8));
+      text.setAttribute("y", String(tip.y + (dy / length) * 8));
+      text.setAttribute("text-anchor", dx < 0 ? "end" : "start");
+    } else {
+      const outward = vessel.side === "rt" ? -1 : 1;
+      const stack = { A: -7, B: 0, C: -9, D: 6, E: -12, F: 8, G: 2 }[vessel.code] || 0;
+      text.setAttribute("x", String(beforeTip.x + outward * 4));
+      text.setAttribute("y", String(beforeTip.y + stack));
+      text.setAttribute("text-anchor", vessel.side === "rt" ? "end" : "start");
+    }
     text.setAttribute("font-size", "9");
     text.setAttribute("fill", "#44403c");
     text.setAttribute("pointer-events", "none");
@@ -259,7 +423,7 @@ function renderMarkers() {
 function renderHandles() {
   handleLayer.replaceChildren();
   const vessel = vesselById(state.selectedVesselId);
-  if (!vessel || state.mode !== "path" || !vessel.visible) return;
+  if (!vessel || state.mode !== "path" || !isShown(vessel)) return;
   vessel.points.forEach((point, index) => {
     const handle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     handle.setAttribute("cx", String(point.x + point.hx));
@@ -299,9 +463,18 @@ function renderInspector() {
   const editingField = document.activeElement?.id?.startsWith("field-");
   vesselFields.hidden = !vessel;
   markerFields.hidden = !marker;
+  document.querySelector("#delete-branch").hidden = !vessel?.parentId;
+  document.querySelector("#reset-vessel").hidden = Boolean(vessel?.parentId);
   if (vessel) {
+    const parent = vesselById(vessel.parentId);
     title.textContent = `${vessel.sideName} ${vessel.name}`;
-    hint.textContent = "흰 점을 끌어 위치를 옮기고, 노란 핸들로 구부립니다.";
+    if (state.mode === "branch") {
+      hint.textContent = "표시된 혈관 중간을 누른 채 끌어 가지를 뺍니다. 짧게 누르면 바깥쪽으로 짧은 가지가 생깁니다.";
+    } else if (parent) {
+      hint.textContent = `${parent.name}에 붙은 가지입니다. 시작 흰 점은 그 혈관을 따라 움직이고, 끝점은 자유롭게 구부립니다.`;
+    } else {
+      hint.textContent = "흰 점을 끌어 위치를 옮기고, 노란 핸들로 구부립니다. 중간에서 가지는 길이의 한가운데에서 가지를 뺍니다.";
+    }
     if (!editingField) {
       document.querySelector("#field-name").value = vessel.name;
       document.querySelector("#field-diameter").value = String(vessel.diameter);
@@ -316,10 +489,14 @@ function renderInspector() {
     if (!editingField) document.querySelector("#field-note").value = marker.note || "";
   } else {
     title.textContent = "혈관을 선택하세요";
-    hint.textContent = "왼쪽 체크를 켜면 혈관이 나타납니다. 이름을 누르면 굵기, 색, 굽힘을 바꿉니다.";
+    hint.textContent = state.mode === "branch"
+      ? "표시된 혈관 중간을 누른 채 끌어 가지를 뺍니다. 짧게 누르면 바깥쪽으로 짧은 가지가 생깁니다."
+      : "왼쪽 체크를 켜면 혈관이 나타납니다. 가지 따기를 누른 뒤 혈관 중간을 끌어 가지를 뺍니다.";
   }
   document.querySelector("#mode-path").classList.toggle("active", state.mode === "path");
+  document.querySelector("#mode-branch").classList.toggle("active", state.mode === "branch");
   document.querySelector("#mode-marker").classList.toggle("active", state.mode === "marker");
+  svg.classList.toggle("branch-mode", state.mode === "branch");
   document.querySelector("#marker-type").disabled = state.mode !== "marker";
   document.querySelector("#marker-type").value = state.markerType;
 }
@@ -349,6 +526,9 @@ function onPointerDown(event) {
     state.selectedMarkerId = id;
     state.selectedVesselId = null;
     drag = { kind: "marker", id };
+  } else if (target.dataset.vessel && state.mode === "branch") {
+    startBranch(vesselById(target.dataset.vessel), point, event);
+    return;
   } else if (target.dataset.vessel) {
     state.selectedVesselId = target.dataset.vessel;
     state.selectedMarkerId = null;
@@ -381,23 +561,67 @@ function onPointerMove(event) {
     const vessel = vesselById(drag.id);
     const anchor = vessel?.points[drag.index];
     if (!anchor) return;
-    if (drag.kind === "anchor") {
+    if (drag.kind === "anchor" && vessel.junction && drag.index === 0 && !drag.pulling) {
+      const parent = vesselById(vessel.parentId);
+      const hit = parent ? closestOnPath(parent.points, point) : null;
+      if (hit) {
+        vessel.junction.segment = hit.segment;
+        vessel.junction.t = hit.t;
+      }
+    } else if (drag.kind === "anchor") {
       anchor.x = point.x;
       anchor.y = point.y;
     } else {
       anchor.hx = point.x - anchor.x;
       anchor.hy = point.y - anchor.y;
     }
+    if (drag.pulling) aimOutward(vessel);
   }
   renderVessels();
   renderMarkers();
   renderHandles();
 }
 
+function finishPull(pull) {
+  const vessel = vesselById(pull.id);
+  if (!vessel || vessel.points.length < 2) return;
+  const origin = vessel.points[0];
+  const tip = vessel.points[vessel.points.length - 1];
+  if (Math.hypot(tip.x - origin.x, tip.y - origin.y) < 20) {
+    const parent = vesselById(vessel.parentId);
+    const direction = perpendicularAway({
+      x: origin.x,
+      y: origin.y,
+      tangent: tangentAt(parent, vessel.junction),
+    });
+    tip.x = origin.x + direction.x * 48;
+    tip.y = origin.y + direction.y * 48;
+  }
+  aimOutward(vessel);
+  state.mode = "path";
+  state.selectedPoint = vessel.points.length - 1;
+}
+
 function onPointerUp() {
   if (!drag) return;
+  if (drag.pulling) finishPull(drag);
   drag = null;
   commit();
+}
+
+function startBranch(parent, point, event) {
+  if (!parent || parent.points.length < 2) return;
+  const hit = closestOnPath(parent.points, point);
+  if (!hit) return;
+  const branch = buildBranch(parent, hit);
+  setVisible(parent, true);
+  state.vessels.push(branch);
+  state.selectedVesselId = branch.id;
+  state.selectedMarkerId = null;
+  state.selectedPoint = 1;
+  drag = { kind: "anchor", index: 1, id: branch.id, pulling: true };
+  if (event) svg.setPointerCapture(event.pointerId);
+  render();
 }
 
 function addMarker(point) {
@@ -416,6 +640,11 @@ function addMarker(point) {
 
 document.querySelector("#mode-path").addEventListener("click", () => {
   state.mode = "path";
+  render();
+});
+document.querySelector("#mode-branch").addEventListener("click", () => {
+  state.mode = "branch";
+  state.selectedMarkerId = null;
   render();
 });
 document.querySelector("#mode-marker").addEventListener("click", () => {
@@ -465,7 +694,7 @@ document.querySelector("#field-style").addEventListener("change", (event) => {
 document.querySelector("#field-visible").addEventListener("change", (event) => {
   const vessel = vesselById(state.selectedVesselId);
   if (!vessel) return;
-  vessel.visible = event.target.checked;
+  setVisible(vessel, event.target.checked);
   commit();
 });
 document.querySelector("#field-note").addEventListener("input", (event) => {
@@ -495,8 +724,35 @@ document.querySelector("#add-point").addEventListener("click", () => {
 document.querySelector("#delete-point").addEventListener("click", () => {
   const vessel = vesselById(state.selectedVesselId);
   if (!vessel || vessel.points.length <= 2 || state.selectedPoint == null) return;
+  if (vessel.junction && state.selectedPoint === 0) return;
   vessel.points.splice(state.selectedPoint, 1);
   state.selectedPoint = Math.min(state.selectedPoint, vessel.points.length - 1);
+  commit();
+});
+
+document.querySelector("#add-branch").addEventListener("click", () => {
+  const parent = vesselById(state.selectedVesselId);
+  if (!parent || parent.points.length < 2) return;
+  const hit = pointAlong(parent.points, 0.5);
+  if (!hit) return;
+  const branch = buildBranch(parent, hit);
+  const direction = perpendicularAway(hit);
+  branch.points[1].x = hit.x + direction.x * 48;
+  branch.points[1].y = hit.y + direction.y * 48;
+  aimOutward(branch);
+  setVisible(parent, true);
+  state.vessels.push(branch);
+  state.selectedVesselId = branch.id;
+  state.selectedMarkerId = null;
+  state.selectedPoint = 1;
+  state.mode = "path";
+  commit();
+});
+
+document.querySelector("#delete-branch").addEventListener("click", () => {
+  const vessel = vesselById(state.selectedVesselId);
+  if (!vessel?.parentId) return;
+  removeVessel(vessel.id);
   commit();
 });
 
