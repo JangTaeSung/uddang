@@ -33,6 +33,10 @@ function sliceAxis(start, end, amount) {
   return offsetPath(RT_AXIS.slice(start, end), amount);
 }
 
+function elbowPoint(amount) {
+  return offsetPath(RT_AXIS.slice(3, 6), amount)[1];
+}
+
 function mirrorX(points) {
   return points.map((p) => ({ x: CENTER * 2 - p.x, y: p.y }));
 }
@@ -53,27 +57,34 @@ function withHandles(raw) {
 
 const ARM = {
   rt: {
-    axillary: sliceAxis(0, 3, -3),
     brachial: sliceAxis(1, 5, -1),
     radial: sliceAxis(4, 8, 8),
-    ulnar: sliceAxis(4, 8, -8),
-    cephalic: sliceAxis(0, 8, 13),
-    basilic: sliceAxis(1, 8, -12),
-    median: [
-      ...sliceAxis(4, 5, 13),
-      ...sliceAxis(4, 5, -12),
+    subclavian: [
+      { x: 246, y: 86 },
+      { x: 228, y: 104 },
+      { x: 210, y: 130 },
     ],
+    "axillary-vein": [
+      { x: 210, y: 136 },
+      { x: 196, y: 154 },
+      { x: 184, y: 172 },
+    ],
+    "brachial-vein": sliceAxis(0, 5, -8),
+    cephalic: sliceAxis(0, 8, 13),
+    basilic: sliceAxis(1, 7, -13),
+    median: [elbowPoint(13), elbowPoint(-13)],
   },
 };
 
 const CATALOG = [
-  { key: "axillary", code: "A", name: "Axillary artery", kind: "artery", color: "#b03a2e", diameter: 7 },
-  { key: "brachial", code: "B", name: "Brachial artery", kind: "artery", color: "#c0392b", diameter: 5 },
-  { key: "radial", code: "C", name: "Radial artery", kind: "artery", color: "#e74c3c", diameter: 2.5 },
-  { key: "ulnar", code: "D", name: "Ulnar artery", kind: "artery", color: "#a93226", diameter: 2.4 },
-  { key: "cephalic", code: "E", name: "Cephalic vein", kind: "vein", color: "#2e86c1", diameter: 3 },
-  { key: "basilic", code: "F", name: "Basilic vein", kind: "vein", color: "#1a5276", diameter: 4 },
-  { key: "median", code: "G", name: "Median cubital vein", kind: "vein", color: "#5dade2", diameter: 3 },
+  { key: "brachial", code: "A", name: "Brachial artery", kind: "artery", color: "#c0392b", diameter: 5 },
+  { key: "radial", code: "B", name: "Radial artery", kind: "artery", color: "#e74c3c", diameter: 2.5 },
+  { key: "subclavian", code: "C", name: "Subclavian vein", kind: "vein", color: "#1a365d", diameter: 8 },
+  { key: "axillary-vein", code: "D", name: "Axillary vein", kind: "vein", color: "#2471a3", diameter: 6 },
+  { key: "brachial-vein", code: "E", name: "Brachial vein", kind: "vein", color: "#3498db", diameter: 4 },
+  { key: "cephalic", code: "F", name: "Cephalic vein", kind: "vein", color: "#2e86c1", diameter: 3 },
+  { key: "basilic", code: "G", name: "Basilic vein", kind: "vein", color: "#1a5276", diameter: 4 },
+  { key: "median", code: "H", name: "Median cubital vein", kind: "vein", color: "#5dade2", diameter: 3 },
 ];
 
 const KOREAN_NAMES = {
@@ -84,7 +95,12 @@ const KOREAN_NAMES = {
   "두정맥": "Cephalic vein",
   "기저정맥": "Basilic vein",
   "정중주와정맥": "Median cubital vein",
+  "상완정맥": "Brachial vein",
+  "액와정맥": "Axillary vein",
+  "쇄골하정맥": "Subclavian vein",
 };
+
+const REMOVED_IDS = ["rt-axillary", "lt-axillary", "rt-ulnar", "lt-ulnar"];
 
 export function createDefaultVessels() {
   const vessels = [];
@@ -119,6 +135,37 @@ export function useEnglishNames(vessels) {
     const name = KOREAN_NAMES[vessel.name];
     return name ? { ...vessel, name } : vessel;
   });
+}
+
+export function syncCatalog(vessels) {
+  const removed = new Set(REMOVED_IDS);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const vessel of vessels) {
+      if (vessel.parentId && removed.has(vessel.parentId) && !removed.has(vessel.id)) {
+        removed.add(vessel.id);
+        grew = true;
+      }
+    }
+  }
+  const byId = new Map();
+  for (const vessel of vessels) {
+    if (!removed.has(vessel.id)) byId.set(vessel.id, vessel);
+  }
+  const result = [];
+  for (const fresh of createDefaultVessels()) {
+    const existing = byId.get(fresh.id);
+    if (existing) {
+      existing.code = fresh.code;
+      result.push(existing);
+      byId.delete(fresh.id);
+    } else {
+      result.push(fresh);
+    }
+  }
+  for (const vessel of byId.values()) result.push(vessel);
+  return result;
 }
 
 export const BODY_IMAGE = "assets/body-outline.png";

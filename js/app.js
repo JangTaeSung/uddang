@@ -1,4 +1,4 @@
-import { BODY_IMAGE, MAP_HEIGHT, MAP_WIDTH, cloneVessels, closestOnPath, createDefaultVessels, curvePoint, curveTangent, pointAlong, useEnglishNames } from "./vessels.js";
+import { BODY_IMAGE, MAP_HEIGHT, MAP_WIDTH, cloneVessels, closestOnPath, createDefaultVessels, curvePoint, curveTangent, pointAlong, syncCatalog, useEnglishNames } from "./vessels.js";
 import { clearState, loadState, saveState } from "./storage.js";
 
 const svg = document.querySelector("#map");
@@ -12,7 +12,7 @@ const defaults = createDefaultVessels();
 const saved = loadState();
 
 const state = {
-  vessels: saved?.vessels?.length ? useEnglishNames(saved.vessels) : cloneVessels(defaults),
+  vessels: saved?.vessels?.length ? syncCatalog(useEnglishNames(saved.vessels)) : cloneVessels(defaults),
   markers: Array.isArray(saved?.markers) ? saved.markers : [],
   background: saved?.background || "",
   mode: "path",
@@ -369,7 +369,7 @@ function renderVessels() {
       text.setAttribute("text-anchor", dx < 0 ? "end" : "start");
     } else {
       const outward = vessel.side === "rt" ? -1 : 1;
-      const stack = { A: -7, B: 0, C: -9, D: 6, E: -12, F: 8, G: 2 }[vessel.code] || 0;
+      const stack = { A: -8, B: -10, C: -12, D: 4, E: 8, F: -14, G: 12, H: 2 }[vessel.code] || 0;
       text.setAttribute("x", String(beforeTip.x + outward * 4));
       text.setAttribute("y", String(beforeTip.y + stack));
       text.setAttribute("text-anchor", vessel.side === "rt" ? "end" : "start");
