@@ -97,10 +97,20 @@ aside { border-right: 1px solid var(--line); }
 .inspector { border-left: 1px solid var(--line); }
 
 .stage {
+  position: relative;
   min-width: 0;
   min-height: 0;
   padding: 12px;
   display: grid;
+}
+
+.zoom-tools {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  z-index: 2;
+  display: flex;
+  gap: 4px;
 }
 
 svg#map {
