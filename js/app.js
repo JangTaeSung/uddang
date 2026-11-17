@@ -735,9 +735,14 @@ function renderVessels() {
     }
   }
   for (const side of ["rt", "lt"]) {
-    const items = labels.filter((item) => item.side === side).sort((a, b) => a.prefer - b.prefer);
+    const labelOrder = ["Axillary artery", "Cephalic vein", "Brachial artery", "Basilic vein", "Median cubital vein", "Ulnar artery", "Radial artery"];
+    const rank = (name) => {
+      const index = labelOrder.indexOf(name);
+      return index === -1 ? labelOrder.length : index;
+    };
+    const items = labels.filter((item) => item.side === side).sort((a, b) => rank(a.name) - rank(b.name) || a.prefer - b.prefer);
     const onLeft = side === "rt";
-    const columnX = onLeft ? 10 : MAP_WIDTH - 10;
+    const columnX = onLeft ? 118 : MAP_WIDTH - 118;
     let stackY = 124;
     for (const item of items) {
       const placed = Number.isFinite(item.labelX) && Number.isFinite(item.labelY);
@@ -747,7 +752,7 @@ function renderVessels() {
       const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
       text.setAttribute("x", String(textX));
       text.setAttribute("y", String(textY));
-      text.setAttribute("text-anchor", onLeft ? "start" : "end");
+      text.setAttribute("text-anchor", onLeft ? "end" : "start");
       text.setAttribute("font-size", "9");
       text.setAttribute("fill", "#44403c");
       text.setAttribute("stroke", "#fffdf8");
@@ -757,12 +762,11 @@ function renderVessels() {
       text.style.cursor = "grab";
       text.textContent = item.name;
       labelLayer.append(text);
-      const width = text.getComputedTextLength();
       const leader = document.createElementNS("http://www.w3.org/2000/svg", "line");
       leader.dataset.leader = item.id;
       leader.setAttribute("x1", String(item.x));
       leader.setAttribute("y1", String(item.y));
-      leader.setAttribute("x2", String(onLeft ? textX + width + 2 : textX - width - 2));
+      leader.setAttribute("x2", String(onLeft ? textX + 3 : textX - 3));
       leader.setAttribute("y2", String(textY - 3));
       leader.setAttribute("stroke", "#a8a29e");
       leader.setAttribute("stroke-width", "0.6");
@@ -1158,9 +1162,8 @@ function onPointerMove(event) {
     vessel.labelY = y;
     text.setAttribute("x", String(x));
     text.setAttribute("y", String(y));
-    const width = text.getComputedTextLength();
-    const towardRight = text.getAttribute("text-anchor") !== "end";
-    leader.setAttribute("x2", String(towardRight ? x + width + 2 : x - width - 2));
+    const anchorIsEnd = text.getAttribute("text-anchor") === "end";
+    leader.setAttribute("x2", String(anchorIsEnd ? x + 3 : x - 3));
     leader.setAttribute("y2", String(y - 3));
     return;
   }
