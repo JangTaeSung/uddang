@@ -20,7 +20,7 @@ const state = {
   mode: "path",
   markerType: "borderline",
   paintColor: "#2b2b2b",
-  paintSize: 3,
+  paintSize: 6,
   erasing: false,
   selectedVesselId: null,
   selectedPoint: null,
@@ -196,7 +196,7 @@ function pointMm(point, vessel) {
 }
 
 function pxWidth(mm, vessel) {
-  let width = Math.max(1.2, mmWidth(mm) * 1.05);
+  let width = Math.max(5, mmWidth(mm) * 2.4);
   if (vessel?.style === "considerable") width *= 1.35;
   if (vessel?.style === "borderline") width *= 0.8;
   return width;
@@ -282,6 +282,77 @@ function ribbonSamples(vessel) {
   return samples;
 }
 
+function wallWeight(vessel) {
+  return vessel.style === "considerable" ? 2 : 1.6;
+}
+
+function appendWall(parent, points, vessel) {
+  if (points.length < 2) return null;
+  const edge = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+  edge.setAttribute("points", points.map((point) => `${point.x},${point.y}`).join(" "));
+  edge.setAttribute("fill", "none");
+  edge.setAttribute("stroke", displayColor(vessel));
+  edge.setAttribute("stroke-width", String(wallWeight(vessel)));
+  edge.setAttribute("stroke-linecap", "butt");
+  edge.setAttribute("stroke-linejoin", "round");
+  edge.setAttribute("pointer-events", "none");
+  if (vessel.style === "borderline") edge.setAttribute("stroke-opacity", "0.55");
+  parent.append(edge);
+  return edge;
+}
+
+function refreshWall(item, side) {
+  item[`${side}Node`].setAttribute("points", item[side].map((point) => `${point.x},${point.y}`).join(" "));
+}
+
+function moveTip(tip, side, point) {
+  const line = tip.item[side];
+  if (tip.which === "start") line[0] = { x: point.x, y: point.y };
+  else line[line.length - 1] = { x: point.x, y: point.y };
+  refreshWall(tip.item, side);
+}
+
+function wallDir(tip, side) {
+  const line = tip.item[side];
+  const from = tip.which === "start" ? line[0] : line[line.length - 2];
+  const to = tip.which === "start" ? line[1] : line[line.length - 1];
+  const length = Math.hypot(to.x - from.x, to.y - from.y) || 1;
+  return { x: (to.x - from.x) / length, y: (to.y - from.y) / length };
+}
+
+function lineIntersect(origin, direction, other, otherDirection) {
+  const det = direction.x * otherDirection.y - direction.y * otherDirection.x;
+  if (Math.abs(det) < 0.0001) return null;
+  const t = ((other.x - origin.x) * otherDirection.y - (other.y - origin.y) * otherDirection.x) / det;
+  return { x: origin.x + direction.x * t, y: origin.y + direction.y * t };
+}
+
+function meetWalls(tipA, sideA, tipB, sideB) {
+  const a = tipPoint(tipA, sideA);
+  const b = tipPoint(tipB, sideB);
+  const hit = lineIntersect(a, wallDir(tipA, sideA), b, wallDir(tipB, sideB));
+  if (!hit) return false;
+  if (Math.hypot(hit.x - a.x, hit.y - a.y) > 22 || Math.hypot(hit.x - b.x, hit.y - b.y) > 22) return false;
+  moveTip(tipA, sideA, hit);
+  moveTip(tipB, sideB, hit);
+  return true;
+}
+
+function appendJoint(a, b, vessel) {
+  if (Math.hypot(a.x - b.x, a.y - b.y) > 28) return;
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  line.setAttribute("x1", String(a.x));
+  line.setAttribute("y1", String(a.y));
+  line.setAttribute("x2", String(b.x));
+  line.setAttribute("y2", String(b.y));
+  line.setAttribute("stroke", displayColor(vessel));
+  line.setAttribute("stroke-width", String(wallWeight(vessel)));
+  line.setAttribute("stroke-linecap", "round");
+  line.setAttribute("pointer-events", "none");
+  if (vessel.style === "borderline") line.setAttribute("stroke-opacity", "0.55");
+  vesselLayer.append(line);
+}
+
 function appendRibbon(vessel) {
   const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
   group.dataset.ribbon = vessel.id;
@@ -291,7 +362,7 @@ function appendRibbon(vessel) {
   const samples = ribbonSamples(vessel);
   if (samples.length < 2) {
     vesselLayer.append(group);
-    return;
+    return null;
   }
   let nx = 0;
   let ny = -1;
@@ -308,22 +379,147 @@ function appendRibbon(vessel) {
       ny = tx / length;
     }
     const half = samples[index].width / 2;
-    left.push(`${samples[index].x + nx * half},${samples[index].y + ny * half}`);
-    right.push(`${samples[index].x - nx * half},${samples[index].y - ny * half}`);
+    left.push({ x: samples[index].x + nx * half, y: samples[index].y + ny * half });
+    right.push({ x: samples[index].x - nx * half, y: samples[index].y - ny * half });
   }
-  const weight = vessel.style === "considerable" ? 2 : 1.35;
-  for (const points of [left, right]) {
-    const edge = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-    edge.setAttribute("points", points.join(" "));
-    edge.setAttribute("fill", "none");
-    edge.setAttribute("stroke", displayColor(vessel));
-    edge.setAttribute("stroke-width", String(weight));
-    edge.setAttribute("stroke-linecap", "round");
-    edge.setAttribute("stroke-linejoin", "round");
-    if (vessel.style === "borderline") edge.setAttribute("stroke-opacity", "0.55");
-    group.append(edge);
-  }
+  const leftNode = appendWall(group, left, vessel);
+  const rightNode = appendWall(group, right, vessel);
   vesselLayer.append(group);
+  const second = samples[1];
+  const penultimate = samples[samples.length - 2];
+  const last = samples[samples.length - 1];
+  return { vessel, left, right, leftNode, rightNode, samples, second, penultimate, last };
+}
+
+function tipPoint(tip, side) {
+  const line = tip.item[side];
+  return tip.which === "start" ? line[0] : line[line.length - 1];
+}
+
+function tipUnit(tip) {
+  const length = Math.hypot(tip.dx, tip.dy) || 1;
+  return { x: tip.dx / length, y: tip.dy / length };
+}
+
+function joinTwoTips(a, b) {
+  const aLeft = tipPoint(a, "left");
+  const aRight = tipPoint(a, "right");
+  const bLeft = tipPoint(b, "left");
+  const bRight = tipPoint(b, "right");
+  const straight = Math.hypot(aLeft.x - bLeft.x, aLeft.y - bLeft.y) + Math.hypot(aRight.x - bRight.x, aRight.y - bRight.y);
+  const crossed = Math.hypot(aLeft.x - bRight.x, aLeft.y - bRight.y) + Math.hypot(aRight.x - bLeft.x, aRight.y - bLeft.y);
+  const vessel = a.item.vessel;
+  if (straight <= crossed) {
+    if (!meetWalls(a, "left", b, "left")) appendJoint(aLeft, bLeft, vessel);
+    if (!meetWalls(a, "right", b, "right")) appendJoint(aRight, bRight, vessel);
+  } else {
+    if (!meetWalls(a, "left", b, "right")) appendJoint(aLeft, bRight, vessel);
+    if (!meetWalls(a, "right", b, "left")) appendJoint(aRight, bLeft, vessel);
+  }
+}
+
+function outerSide(branch, other) {
+  const otherWay = tipUnit(other);
+  const left = tipPoint(branch, "left");
+  const right = tipPoint(branch, "right");
+  const leftToward = (left.x - branch.x) * otherWay.x + (left.y - branch.y) * otherWay.y;
+  const rightToward = (right.x - branch.x) * otherWay.x + (right.y - branch.y) * otherWay.y;
+  return leftToward < rightToward ? "left" : "right";
+}
+
+function joinFork(tips) {
+  let stem = tips[0];
+  let stemScore = Infinity;
+  for (const tip of tips) {
+    const way = tipUnit(tip);
+    let score = 0;
+    for (const other of tips) {
+      if (other === tip) continue;
+      const otherWay = tipUnit(other);
+      score += way.x * otherWay.x + way.y * otherWay.y;
+    }
+    if (score < stemScore) {
+      stemScore = score;
+      stem = tip;
+    }
+  }
+  const arrival = { x: -tipUnit(stem).x, y: -tipUnit(stem).y };
+  const branches = tips.filter((tip) => tip !== stem).sort((a, b) => {
+    const aWay = tipUnit(a);
+    const bWay = tipUnit(b);
+    const aCross = arrival.x * aWay.y - arrival.y * aWay.x;
+    const bCross = arrival.x * bWay.y - arrival.y * bWay.x;
+    return bCross - aCross;
+  });
+  const leftBranch = branches[0];
+  const rightBranch = branches[1];
+  const leftOuter = outerSide(leftBranch, rightBranch);
+  const rightOuter = outerSide(rightBranch, leftBranch);
+  const leftInner = leftOuter === "left" ? "right" : "left";
+  const rightInner = rightOuter === "left" ? "right" : "left";
+  const stemLeft = tipPoint(stem, "left");
+  const stemRight = tipPoint(stem, "right");
+  const outerLeft = tipPoint(leftBranch, leftOuter);
+  const outerRight = tipPoint(rightBranch, rightOuter);
+  const straight = Math.hypot(stemLeft.x - outerLeft.x, stemLeft.y - outerLeft.y) + Math.hypot(stemRight.x - outerRight.x, stemRight.y - outerRight.y);
+  const crossed = Math.hypot(stemLeft.x - outerRight.x, stemLeft.y - outerRight.y) + Math.hypot(stemRight.x - outerLeft.x, stemRight.y - outerLeft.y);
+  const leftMatched = straight <= crossed;
+  if (!(leftMatched ? meetWalls(stem, "left", leftBranch, leftOuter) : meetWalls(stem, "left", rightBranch, rightOuter))) {
+    appendJoint(stemLeft, leftMatched ? outerLeft : outerRight, stem.item.vessel);
+  }
+  if (!(leftMatched ? meetWalls(stem, "right", rightBranch, rightOuter) : meetWalls(stem, "right", leftBranch, leftOuter))) {
+    appendJoint(stemRight, leftMatched ? outerRight : outerLeft, stem.item.vessel);
+  }
+  if (!meetWalls(leftBranch, leftInner, rightBranch, rightInner)) {
+    const innerA = tipPoint(leftBranch, leftInner);
+    const innerB = tipPoint(rightBranch, rightInner);
+    const mid = { x: (innerA.x + innerB.x) / 2, y: (innerA.y + innerB.y) / 2 };
+    appendJoint(innerA, mid, leftBranch.item.vessel);
+    appendJoint(innerB, mid, rightBranch.item.vessel);
+  }
+}
+
+function joinOutlines(items) {
+  const tips = [];
+  for (const item of items) {
+    const first = item.samples[0];
+    tips.push({
+      item,
+      which: "start",
+      x: first.x,
+      y: first.y,
+      dx: item.second.x - first.x,
+      dy: item.second.y - first.y,
+    });
+    tips.push({
+      item,
+      which: "end",
+      x: item.last.x,
+      y: item.last.y,
+      dx: item.penultimate.x - item.last.x,
+      dy: item.penultimate.y - item.last.y,
+    });
+  }
+  const parent = tips.map((_, index) => index);
+  const find = (index) => {
+    if (parent[index] !== index) parent[index] = find(parent[index]);
+    return parent[index];
+  };
+  for (let i = 0; i < tips.length; i += 1) {
+    for (let j = i + 1; j < tips.length; j += 1) {
+      if (Math.hypot(tips[i].x - tips[j].x, tips[i].y - tips[j].y) <= 5) parent[find(i)] = find(j);
+    }
+  }
+  const groups = new Map();
+  tips.forEach((tip, index) => {
+    const key = find(index);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(tip);
+  });
+  for (const group of groups.values()) {
+    if (group.length === 2) joinTwoTips(group[0], group[1]);
+    else if (group.length === 3) joinFork(group);
+  }
 }
 
 function setVisible(vessel, visible) {
@@ -447,6 +643,7 @@ function renderVessels() {
   vesselLayer.replaceChildren();
   labelLayer.replaceChildren();
   const labels = [];
+  const outlines = [];
   for (const vessel of state.vessels) {
     if (!isShown(vessel)) continue;
     const center = curvePath(vessel.points);
@@ -460,7 +657,8 @@ function renderVessels() {
     hit.dataset.vessel = vessel.id;
     hit.style.cursor = state.mode === "paint" ? "crosshair" : "grab";
     vesselLayer.append(hit);
-    appendRibbon(vessel);
+    const outline = appendRibbon(vessel);
+    if (outline) outlines.push(outline);
     const anchorIndex = Math.min(Math.max(vessel.labelAt ?? 1, 0), vessel.points.length - 1);
     const anchor = vessel.points[anchorIndex];
     if (vessel.parentId) {
@@ -514,6 +712,7 @@ function renderVessels() {
       labelLayer.append(leader, text);
     }
   }
+  joinOutlines(outlines);
 }
 
 function pencilJitter(index, salt) {
@@ -1236,7 +1435,7 @@ document.querySelector("#paint-color").addEventListener("input", (event) => {
   renderInspector();
 });
 document.querySelector("#paint-size").addEventListener("input", (event) => {
-  state.paintSize = Number(event.target.value) || 3;
+  state.paintSize = Number(event.target.value) || 6;
 });
 document.querySelector("#paint-erase").addEventListener("click", () => {
   state.erasing = !state.erasing;
