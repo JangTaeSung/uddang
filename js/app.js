@@ -425,6 +425,7 @@ function renderVessels() {
   syncJunctions();
   vesselLayer.replaceChildren();
   labelLayer.replaceChildren();
+  const labels = [];
   for (const vessel of state.vessels) {
     if (!isShown(vessel)) continue;
     const center = curvePath(vessel.points);
@@ -439,29 +440,58 @@ function renderVessels() {
     hit.style.cursor = state.mode === "paint" ? "crosshair" : "grab";
     vesselLayer.append(hit);
     appendRibbon(vessel);
-
-    const tip = vessel.points[vessel.points.length - 1];
-    const beforeTip = vessel.points[Math.max(0, vessel.points.length - 2)];
-    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    const anchorIndex = Math.min(Math.max(vessel.labelAt ?? 1, 0), vessel.points.length - 1);
+    const anchor = vessel.points[anchorIndex];
     if (vessel.parentId) {
+      const tip = vessel.points[vessel.points.length - 1];
+      const beforeTip = vessel.points[Math.max(0, vessel.points.length - 2)];
       const dx = tip.x - beforeTip.x;
       const dy = tip.y - beforeTip.y;
       const length = Math.hypot(dx, dy) || 1;
+      const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
       text.setAttribute("x", String(tip.x + (dx / length) * 8));
       text.setAttribute("y", String(tip.y + (dy / length) * 8));
       text.setAttribute("text-anchor", dx < 0 ? "end" : "start");
+      text.setAttribute("font-size", "8");
+      text.setAttribute("fill", "#44403c");
+      text.setAttribute("pointer-events", "none");
+      text.textContent = vessel.name;
+      labelLayer.append(text);
     } else {
-      const outward = vessel.side === "rt" ? -1 : 1;
-      const stack = { A: -8, B: -10, C: -12, D: 4, E: 8, F: -14, G: 12, H: 2 }[vessel.code] || 0;
-      text.setAttribute("x", String(beforeTip.x + outward * 4));
-      text.setAttribute("y", String(beforeTip.y + stack));
-      text.setAttribute("text-anchor", vessel.side === "rt" ? "end" : "start");
+      labels.push({
+        side: vessel.side,
+        name: vessel.name,
+        x: anchor.x,
+        y: anchor.y,
+        prefer: anchor.y + (vessel.labelDy || 0),
+      });
     }
-    text.setAttribute("font-size", "9");
-    text.setAttribute("fill", "#44403c");
-    text.setAttribute("pointer-events", "none");
-    text.textContent = `${vessel.code} ${vessel.diameter}`;
-    labelLayer.append(text);
+  }
+  for (const side of ["rt", "lt"]) {
+    const items = labels.filter((item) => item.side === side).sort((a, b) => a.prefer - b.prefer);
+    const column = side === "rt" ? 206 : MAP_WIDTH - 206;
+    let lastY = -999;
+    for (const item of items) {
+      const y = Math.max(item.prefer, lastY + 12);
+      lastY = y;
+      const leader = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      leader.setAttribute("x1", String(item.x));
+      leader.setAttribute("y1", String(item.y));
+      leader.setAttribute("x2", String(column));
+      leader.setAttribute("y2", String(y));
+      leader.setAttribute("stroke", "#a8a29e");
+      leader.setAttribute("stroke-width", "0.6");
+      leader.setAttribute("pointer-events", "none");
+      const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      text.setAttribute("x", String(column + (side === "rt" ? 3 : -3)));
+      text.setAttribute("y", String(y + 3));
+      text.setAttribute("text-anchor", side === "rt" ? "start" : "end");
+      text.setAttribute("font-size", "8");
+      text.setAttribute("fill", "#44403c");
+      text.setAttribute("pointer-events", "none");
+      text.textContent = item.name;
+      labelLayer.append(leader, text);
+    }
   }
 }
 
@@ -639,7 +669,7 @@ function renderInspector() {
     title.textContent = state.mode === "paint" ? "칠하기" : "혈관을 선택하세요";
     hint.textContent = state.mode === "paint"
       ? "붓으로 혈관 위를 칠합니다. 혈전 색을 고르거나 지우개로 지웁니다."
-      : "왼쪽 체크를 켜면 혈관이 나타납니다. 선을 끌면 구부러지고, 클릭하면 그 자리에 가지 추가가 뜹니다.";
+      : "주요 동맥과 얕은 정맥이 켜져 있습니다. 선을 끌면 구부러지고, 클릭하면 그 자리에 가지 추가가 뜹니다. 깊은 정맥은 왼쪽에서 켭니다.";
   }
   document.querySelector("#mode-path").classList.toggle("active", state.mode === "path");
   document.querySelector("#mode-paint").classList.toggle("active", state.mode === "paint");
