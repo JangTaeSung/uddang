@@ -19,8 +19,8 @@ const state = {
   background: saved?.background || "",
   mode: "path",
   markerType: "borderline",
-  paintColor: "#6e1b1b",
-  paintSize: 8,
+  paintColor: "#2b2b2b",
+  paintSize: 3,
   erasing: false,
   selectedVesselId: null,
   selectedPoint: null,
@@ -286,21 +286,42 @@ function appendRibbon(vessel) {
   const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
   group.dataset.ribbon = vessel.id;
   group.setAttribute("pointer-events", "none");
-  if (vessel.id === state.selectedVesselId) group.setAttribute("filter", "drop-shadow(0 0 2px rgba(0,0,0,.25))");
+  group.setAttribute("fill", "none");
+  if (vessel.id === state.selectedVesselId) group.setAttribute("filter", "drop-shadow(0 0 1px rgba(0,0,0,.2))");
   const samples = ribbonSamples(vessel);
-  for (let index = 0; index < samples.length - 1; index += 1) {
-    const start = samples[index];
-    const end = samples[index + 1];
-    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    line.setAttribute("x1", String(start.x));
-    line.setAttribute("y1", String(start.y));
-    line.setAttribute("x2", String(end.x));
-    line.setAttribute("y2", String(end.y));
-    line.setAttribute("stroke", displayColor(vessel));
-    line.setAttribute("stroke-width", String((start.width + end.width) / 2));
-    line.setAttribute("stroke-linecap", "round");
-    if (vessel.style === "borderline") line.setAttribute("stroke-opacity", "0.45");
-    group.append(line);
+  if (samples.length < 2) {
+    vesselLayer.append(group);
+    return;
+  }
+  let nx = 0;
+  let ny = -1;
+  const left = [];
+  const right = [];
+  for (let index = 0; index < samples.length; index += 1) {
+    const prev = samples[Math.max(0, index - 1)];
+    const next = samples[Math.min(samples.length - 1, index + 1)];
+    const tx = next.x - prev.x;
+    const ty = next.y - prev.y;
+    const length = Math.hypot(tx, ty);
+    if (length > 0.001) {
+      nx = -ty / length;
+      ny = tx / length;
+    }
+    const half = samples[index].width / 2;
+    left.push(`${samples[index].x + nx * half},${samples[index].y + ny * half}`);
+    right.push(`${samples[index].x - nx * half},${samples[index].y - ny * half}`);
+  }
+  const weight = vessel.style === "considerable" ? 2 : 1.35;
+  for (const points of [left, right]) {
+    const edge = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    edge.setAttribute("points", points.join(" "));
+    edge.setAttribute("fill", "none");
+    edge.setAttribute("stroke", displayColor(vessel));
+    edge.setAttribute("stroke-width", String(weight));
+    edge.setAttribute("stroke-linecap", "round");
+    edge.setAttribute("stroke-linejoin", "round");
+    if (vessel.style === "borderline") edge.setAttribute("stroke-opacity", "0.55");
+    group.append(edge);
   }
   vesselLayer.append(group);
 }
@@ -495,19 +516,41 @@ function renderVessels() {
   }
 }
 
+function pencilJitter(index, salt) {
+  const n = Math.sin(index * 12.9898 + salt * 78.233) * 43758.5453;
+  return n - Math.floor(n);
+}
+
 function renderPaint() {
   paintLayer.replaceChildren();
   for (const stroke of state.paint) {
     if (!stroke.points || stroke.points.length < 2) continue;
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-    path.setAttribute("points", stroke.points.map((point) => `${point.x},${point.y}`).join(" "));
-    path.setAttribute("fill", "none");
-    path.setAttribute("stroke", stroke.color || "#6e1b1b");
-    path.setAttribute("stroke-width", String(stroke.size || 8));
-    path.setAttribute("stroke-linecap", "round");
-    path.setAttribute("stroke-linejoin", "round");
-    path.setAttribute("pointer-events", "none");
-    paintLayer.append(path);
+    const size = stroke.size || 3;
+    const passes = [
+      { salt: 1.2, width: size, opacity: 0.82, scale: 0.28 },
+      { salt: 4.7, width: Math.max(0.8, size * 0.5), opacity: 0.38, scale: 0.55 },
+    ];
+    for (const pass of passes) {
+      const points = stroke.points.map((point, index) => {
+        const prev = stroke.points[Math.max(0, index - 1)];
+        const next = stroke.points[Math.min(stroke.points.length - 1, index + 1)];
+        const tx = next.x - prev.x;
+        const ty = next.y - prev.y;
+        const length = Math.hypot(tx, ty) || 1;
+        const offset = (pencilJitter(index, pass.salt) - 0.5) * size * pass.scale;
+        return `${point.x + (-ty / length) * offset},${point.y + (tx / length) * offset}`;
+      });
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+      path.setAttribute("points", points.join(" "));
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", stroke.color || "#2b2b2b");
+      path.setAttribute("stroke-width", String(pass.width));
+      path.setAttribute("stroke-opacity", String(pass.opacity));
+      path.setAttribute("stroke-linecap", "round");
+      path.setAttribute("stroke-linejoin", "round");
+      path.setAttribute("pointer-events", "none");
+      paintLayer.append(path);
+    }
   }
 }
 
@@ -646,7 +689,7 @@ function renderInspector() {
     const parent = vesselById(vessel.parentId);
     title.textContent = `${vessel.sideName} ${vessel.name}`;
     if (state.mode === "paint") {
-      hint.textContent = "붓으로 혈관 위를 칠합니다. 혈전 색을 고르거나 지우개로 지웁니다.";
+      hint.textContent = "연필로 긋습니다. 색을 바꾸면 다음 선부터 적용되고, 지우개로 지웁니다.";
     } else if (parent) {
       hint.textContent = `${parent.name}에서 나온 가지입니다. 선을 끌면 구부러지고, 시작 점은 그 혈관을 따라 움직입니다.`;
     } else {
@@ -666,9 +709,9 @@ function renderInspector() {
     hint.textContent = "표식을 끌어 옮기거나 메모를 적습니다.";
     if (!editingField) document.querySelector("#field-note").value = marker.note || "";
   } else {
-    title.textContent = state.mode === "paint" ? "칠하기" : "혈관을 선택하세요";
+    title.textContent = state.mode === "paint" ? "연필" : "혈관을 선택하세요";
     hint.textContent = state.mode === "paint"
-      ? "붓으로 혈관 위를 칠합니다. 혈전 색을 고르거나 지우개로 지웁니다."
+      ? "연필로 긋습니다. 색을 바꾸면 다음 선부터 적용되고, 지우개로 지웁니다."
       : "주요 동맥과 얕은 정맥이 켜져 있습니다. 선을 끌면 구부러지고, 클릭하면 그 자리에 가지 추가가 뜹니다. 깊은 정맥은 왼쪽에서 켭니다.";
   }
   document.querySelector("#mode-path").classList.toggle("active", state.mode === "path");
@@ -1193,7 +1236,7 @@ document.querySelector("#paint-color").addEventListener("input", (event) => {
   renderInspector();
 });
 document.querySelector("#paint-size").addEventListener("input", (event) => {
-  state.paintSize = Number(event.target.value) || 8;
+  state.paintSize = Number(event.target.value) || 3;
 });
 document.querySelector("#paint-erase").addEventListener("click", () => {
   state.erasing = !state.erasing;

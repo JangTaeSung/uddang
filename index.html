@@ -14,7 +14,7 @@
     </div>
     <div class="tools">
       <button type="button" id="mode-path" class="mode-btn active">구부리기</button>
-      <button type="button" id="mode-paint" class="mode-btn">칠하기</button>
+      <button type="button" id="mode-paint" class="mode-btn">연필</button>
       <button type="button" id="mode-marker" class="mode-btn">표식</button>
       <select id="marker-type" disabled>
         <option value="borderline">보더라인</option>
@@ -23,11 +23,14 @@
         <option value="branch">분지 (Br)</option>
       </select>
       <span id="paint-tools" hidden>
-        <button type="button" class="paint-color" data-color="#6e1b1b">혈전</button>
-        <button type="button" class="paint-color" data-color="#d35400">협착</button>
-        <button type="button" class="paint-color" data-color="#1e8449">표시</button>
-        <input id="paint-color" type="color" value="#6e1b1b" aria-label="붓 색">
-        <input id="paint-size" type="range" min="3" max="28" value="8" aria-label="붓 크기">
+        <button type="button" class="paint-color" data-color="#2b2b2b" title="검정" style="background:#2b2b2b"></button>
+        <button type="button" class="paint-color" data-color="#c0392b" title="빨강" style="background:#c0392b"></button>
+        <button type="button" class="paint-color" data-color="#1a5276" title="파랑" style="background:#1a5276"></button>
+        <button type="button" class="paint-color" data-color="#1e8449" title="초록" style="background:#1e8449"></button>
+        <button type="button" class="paint-color" data-color="#6e1b1b" title="혈전" style="background:#6e1b1b"></button>
+        <button type="button" class="paint-color" data-color="#d35400" title="협착" style="background:#d35400"></button>
+        <input id="paint-color" type="color" value="#2b2b2b" aria-label="연필 색">
+        <input id="paint-size" type="range" min="1" max="14" value="3" aria-label="연필 굵기">
         <button type="button" id="paint-erase">지우개</button>
       </span>
       <button type="button" id="undo" disabled>되돌리기</button>
