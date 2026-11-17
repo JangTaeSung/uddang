@@ -129,11 +129,30 @@ function renderList() {
     title.textContent = side === "rt" ? "오른팔 (화면 왼쪽)" : "왼팔 (화면 오른쪽)";
     listEl.append(title);
     for (const vessel of state.vessels.filter((item) => item.side === side)) {
+      const row = document.createElement("div");
+      row.className = "vessel-row";
+      if (!vessel.visible) row.classList.add("hidden-vessel");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "vessel-check";
+      checkbox.checked = vessel.visible;
+      checkbox.setAttribute("aria-label", `${vessel.sideName} ${vessel.name} 표시`);
+      checkbox.addEventListener("change", () => {
+        vessel.visible = checkbox.checked;
+        if (checkbox.checked) {
+          state.selectedVesselId = vessel.id;
+          state.selectedMarkerId = null;
+          state.selectedPoint = null;
+          state.mode = "path";
+        } else if (state.selectedVesselId === vessel.id) {
+          state.selectedPoint = null;
+        }
+        commit();
+      });
       const button = document.createElement("button");
       button.type = "button";
       button.className = "vessel-btn";
       if (vessel.id === state.selectedVesselId) button.classList.add("selected");
-      if (!vessel.visible) button.classList.add("hidden-vessel");
       const swatch = document.createElement("i");
       swatch.className = "swatch";
       swatch.style.background = displayColor(vessel);
@@ -149,7 +168,8 @@ function renderList() {
         state.mode = "path";
         render();
       });
-      listEl.append(button);
+      row.append(checkbox, button);
+      listEl.append(row);
     }
   }
 }
@@ -296,7 +316,7 @@ function renderInspector() {
     if (!editingField) document.querySelector("#field-note").value = marker.note || "";
   } else {
     title.textContent = "혈관을 선택하세요";
-    hint.textContent = "목록 또는 도식에서 혈관을 고르면 굵기, 색, 굽힘을 바꿀 수 있습니다.";
+    hint.textContent = "왼쪽 체크를 켜면 혈관이 나타납니다. 이름을 누르면 굵기, 색, 굽힘을 바꿉니다.";
   }
   document.querySelector("#mode-path").classList.toggle("active", state.mode === "path");
   document.querySelector("#mode-marker").classList.toggle("active", state.mode === "marker");
@@ -533,38 +553,69 @@ function download(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
-function exportSvgNode() {
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("이미지를 불러오지 못했습니다."));
+    image.src = src;
+  });
+}
+
+async function outlineDataUrl() {
+  const href = state.background || BODY_IMAGE;
+  if (href.startsWith("data:")) return href;
+  const response = await fetch(href);
+  const blob = await response.blob();
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function exportSvgNode() {
   const clone = svg.cloneNode(true);
   clone.querySelector("#handles")?.remove();
+  const outline = await outlineDataUrl();
+  const image = clone.querySelector("#bg-image");
+  image.setAttribute("href", outline);
+  image.setAttributeNS("http://www.w3.org/1999/xlink", "href", outline);
   clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
   clone.setAttribute("width", String(MAP_WIDTH));
   clone.setAttribute("height", String(MAP_HEIGHT));
   return clone;
 }
 
-document.querySelector("#export-svg").addEventListener("click", () => {
-  const blob = new Blob([exportSvgNode().outerHTML], { type: "image/svg+xml" });
+document.querySelector("#export-svg").addEventListener("click", async () => {
+  const blob = new Blob([(await exportSvgNode()).outerHTML], { type: "image/svg+xml" });
   download(blob, "uddang-vessels.svg");
 });
 
-document.querySelector("#export-png").addEventListener("click", () => {
-  const xml = exportSvgNode().outerHTML;
-  const image = new Image();
-  const url = URL.createObjectURL(new Blob([xml], { type: "image/svg+xml" }));
-  image.onload = () => {
-    const canvas = document.createElement("canvas");
-    canvas.width = MAP_WIDTH * 2;
-    canvas.height = MAP_HEIGHT * 2;
-    const context = canvas.getContext("2d");
-    context.fillStyle = "#fffdf8";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.drawImage(image, 0, 0, canvas.width, canvas.height);
-    canvas.toBlob((blob) => {
-      if (blob) download(blob, "uddang-vessels.png");
-      URL.revokeObjectURL(url);
-    });
-  };
-  image.src = url;
+document.querySelector("#export-png").addEventListener("click", async () => {
+  const outline = await loadImage(await outlineDataUrl());
+  const clone = svg.cloneNode(true);
+  clone.querySelector("#handles")?.remove();
+  clone.querySelector("#bg-image")?.remove();
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  clone.setAttribute("width", String(MAP_WIDTH));
+  clone.setAttribute("height", String(MAP_HEIGHT));
+  const svgUrl = URL.createObjectURL(new Blob([clone.outerHTML], { type: "image/svg+xml;charset=utf-8" }));
+  const overlay = await loadImage(svgUrl);
+  const canvas = document.createElement("canvas");
+  canvas.width = MAP_WIDTH * 2;
+  canvas.height = MAP_HEIGHT * 2;
+  const context = canvas.getContext("2d");
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(outline, 0, 0, canvas.width, canvas.height);
+  context.drawImage(overlay, 0, 0, canvas.width, canvas.height);
+  URL.revokeObjectURL(svgUrl);
+  canvas.toBlob((blob) => {
+    if (blob) download(blob, "uddang-vessels.png");
+  });
 });
 
 window.addEventListener("keydown", (event) => {

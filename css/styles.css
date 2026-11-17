@@ -119,6 +119,21 @@ svg#map {
   font-weight: 700;
 }
 
+.vessel-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.vessel-check {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
 .vessel-btn {
   width: 100%;
   display: grid;
@@ -126,7 +141,7 @@ svg#map {
   gap: 8px;
   align-items: center;
   text-align: left;
-  margin-bottom: 6px;
+  margin: 0;
   padding: 8px;
 }
 

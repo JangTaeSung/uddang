@@ -90,7 +90,7 @@ export function createDefaultVessels() {
         name: spec.name,
         kind: spec.kind,
         color: spec.color,
-        visible: true,
+        visible: false,
         diameter: spec.diameter,
         style: "normal",
         points: withHandles(raw),
