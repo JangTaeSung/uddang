@@ -748,7 +748,7 @@ function renderVessels() {
       const placed = Number.isFinite(item.labelX) && Number.isFinite(item.labelY);
       const textX = placed ? item.labelX : columnX;
       const textY = placed ? item.labelY : stackY;
-      if (!placed) stackY += 14;
+      stackY += 14;
       const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
       text.setAttribute("x", String(textX));
       text.setAttribute("y", String(textY));
