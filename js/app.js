@@ -742,7 +742,7 @@ function renderVessels() {
     };
     const items = labels.filter((item) => item.side === side).sort((a, b) => rank(a.name) - rank(b.name) || a.prefer - b.prefer);
     const onLeft = side === "rt";
-    const columnX = onLeft ? 73 : MAP_WIDTH - 73;
+    const columnX = onLeft ? 83 : MAP_WIDTH - 83;
     let stackY = 124;
     for (const item of items) {
       const placed = Number.isFinite(item.labelX) && Number.isFinite(item.labelY);
