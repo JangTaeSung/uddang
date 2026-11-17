@@ -164,6 +164,17 @@ svg#map.paint-mode {
 
 #paint-size { width: 84px; }
 
+.list-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.list-actions button {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
 .group-title {
   margin: 12px 0 6px;
   font-size: 12px;
