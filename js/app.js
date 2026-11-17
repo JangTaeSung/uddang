@@ -522,6 +522,12 @@ function joinOutlines(items) {
   }
 }
 
+function setAllVisible(visible) {
+  for (const vessel of state.vessels) vessel.visible = visible;
+  if (!visible) state.selectedPoint = null;
+  commit();
+}
+
 function setVisible(vessel, visible) {
   vessel.visible = visible;
   if (visible) {
@@ -720,64 +726,71 @@ function pencilJitter(index, salt) {
   return n - Math.floor(n);
 }
 
-function pencilPoint(stroke, index, shift, salt, size) {
-  const point = stroke.points[index];
-  const prev = stroke.points[Math.max(0, index - 1)];
-  const next = stroke.points[Math.min(stroke.points.length - 1, index + 1)];
-  const tx = next.x - prev.x;
-  const ty = next.y - prev.y;
-  const length = Math.hypot(tx, ty) || 1;
-  const nx = -ty / length;
-  const ny = tx / length;
-  const wobble = (pencilJitter(index, salt) - 0.5) * size * 0.55;
-  const skip = (pencilJitter(index, salt + 2.2) - 0.5) * size * 0.18;
-  const along = tx / length;
-  const up = ty / length;
-  return {
-    x: point.x + nx * (shift * size + wobble) + along * skip,
-    y: point.y + ny * (shift * size + wobble) + up * skip,
-  };
-}
-
 function renderPaint() {
   paintLayer.replaceChildren();
-  const hairs = [
-    { salt: 1.3, shift: 0, width: 0.34, opacity: 0.72 },
-    { salt: 4.8, shift: -0.34, width: 0.16, opacity: 0.46 },
-    { salt: 7.6, shift: 0.34, width: 0.14, opacity: 0.4 },
-    { salt: 11.4, shift: 0.08, width: 0.1, opacity: 0.28 },
+  const layers = [
+    { salt: 1.7, opacity: 0.62, width: 0.7, reach: 0.18, count: 2 },
+    { salt: 5.3, opacity: 0.38, width: 0.45, reach: 0.55, count: 3 },
+    { salt: 9.1, opacity: 0.22, width: 0.35, reach: 0.92, count: 2 },
   ];
   for (const stroke of state.paint) {
     if (!stroke.points || stroke.points.length < 2) continue;
-    const size = Math.max(1.4, stroke.size || 6);
+    const size = Math.max(1.6, stroke.size || 6);
     const color = stroke.color || "#2b2b2b";
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     group.setAttribute("pointer-events", "none");
-    for (const hair of hairs) {
-      const path = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-      path.setAttribute("points", stroke.points.map((_, index) => {
-        const at = pencilPoint(stroke, index, hair.shift, hair.salt, size);
-        return `${at.x},${at.y}`;
-      }).join(" "));
+    let travel = 0;
+    for (let index = 1; index < stroke.points.length; index += 1) {
+      travel += Math.hypot(stroke.points[index].x - stroke.points[index - 1].x, stroke.points[index].y - stroke.points[index - 1].y);
+    }
+    const spacing = Math.max(0.75, Math.min(size * 0.22, Math.max(travel, 1) / 280));
+    for (const layer of layers) {
+      const commands = [];
+      let sample = 0;
+      for (let index = 1; index < stroke.points.length; index += 1) {
+        const from = stroke.points[index - 1];
+        const to = stroke.points[index];
+        const dx = to.x - from.x;
+        const dy = to.y - from.y;
+        const length = Math.hypot(dx, dy);
+        if (length < 0.2) continue;
+        const tx = dx / length;
+        const ty = dy / length;
+        const nx = -ty;
+        const ny = tx;
+        const steps = Math.max(1, Math.ceil(length / spacing));
+        for (let step = 0; step < steps; step += 1) {
+          const at = (step + 0.35) / steps;
+          const x = from.x + dx * at;
+          const y = from.y + dy * at;
+          for (let flake = 0; flake < layer.count; flake += 1) {
+            const grain = pencilJitter(sample, layer.salt + flake * 3.1);
+            const side = pencilJitter(sample, layer.salt + flake * 5.7 + 1.4);
+            const spin = pencilJitter(sample, layer.salt + flake * 8.9 + 2.8);
+            if (grain < 0.16) {
+              sample += 1;
+              continue;
+            }
+            const offset = (side - 0.5) * size * layer.reach;
+            const drift = (grain - 0.5) * spacing * 0.8;
+            const originX = x + nx * offset + tx * drift;
+            const originY = y + ny * offset + ty * drift;
+            const angle = Math.atan2(ty, tx) + (spin - 0.5) * 1.15;
+            const mark = size * (0.12 + grain * 0.28);
+            commands.push(`M${originX.toFixed(2)} ${originY.toFixed(2)}l${(Math.cos(angle) * mark).toFixed(2)} ${(Math.sin(angle) * mark).toFixed(2)}`);
+            sample += 1;
+          }
+        }
+      }
+      if (!commands.length) continue;
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", commands.join(""));
       path.setAttribute("fill", "none");
       path.setAttribute("stroke", color);
-      path.setAttribute("stroke-width", String(Math.max(0.45, size * hair.width)));
-      path.setAttribute("stroke-opacity", String(hair.opacity));
+      path.setAttribute("stroke-width", String(layer.width));
+      path.setAttribute("stroke-opacity", String(layer.opacity));
       path.setAttribute("stroke-linecap", "round");
-      path.setAttribute("stroke-linejoin", "round");
       group.append(path);
-    }
-    for (let index = 0; index < stroke.points.length; index += 2) {
-      const grain = pencilJitter(index, 13.7);
-      if (grain < 0.42) continue;
-      const at = pencilPoint(stroke, index, (grain - 0.5) * 0.8, 17.2, size);
-      const speck = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-      speck.setAttribute("cx", String(at.x));
-      speck.setAttribute("cy", String(at.y));
-      speck.setAttribute("r", String(Math.max(0.25, size * (0.035 + grain * 0.05))));
-      speck.setAttribute("fill", color);
-      speck.setAttribute("fill-opacity", String(0.18 + grain * 0.35));
-      group.append(speck);
     }
     paintLayer.append(group);
   }
@@ -1467,6 +1480,8 @@ document.querySelector("#paint-color").addEventListener("input", (event) => {
 document.querySelector("#paint-size").addEventListener("input", (event) => {
   state.paintSize = Number(event.target.value) || 6;
 });
+document.querySelector("#vessels-all").addEventListener("click", () => setAllVisible(true));
+document.querySelector("#vessels-none").addEventListener("click", () => setAllVisible(false));
 document.querySelector("#paint-erase").addEventListener("click", () => {
   state.erasing = !state.erasing;
   renderInspector();
