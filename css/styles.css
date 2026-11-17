@@ -145,6 +145,11 @@ svg#map {
   padding: 8px;
 }
 
+.vessel-btn span {
+  min-width: 0;
+  line-height: 1.25;
+}
+
 .vessel-btn.selected {
   border-color: var(--accent);
   box-shadow: inset 0 0 0 1px var(--accent);

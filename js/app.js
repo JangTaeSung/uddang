@@ -1,4 +1,4 @@
-import { BODY_IMAGE, MAP_HEIGHT, MAP_WIDTH, cloneVessels, createDefaultVessels } from "./vessels.js";
+import { BODY_IMAGE, MAP_HEIGHT, MAP_WIDTH, cloneVessels, createDefaultVessels, useEnglishNames } from "./vessels.js";
 import { clearState, loadState, saveState } from "./storage.js";
 
 const svg = document.querySelector("#map");
@@ -12,7 +12,7 @@ const defaults = createDefaultVessels();
 const saved = loadState();
 
 const state = {
-  vessels: saved?.vessels?.length ? saved.vessels : cloneVessels(defaults),
+  vessels: saved?.vessels?.length ? useEnglishNames(saved.vessels) : cloneVessels(defaults),
   markers: Array.isArray(saved?.markers) ? saved.markers : [],
   background: saved?.background || "",
   mode: "path",

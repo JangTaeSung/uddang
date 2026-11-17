@@ -67,14 +67,24 @@ const ARM = {
 };
 
 const CATALOG = [
-  { key: "axillary", code: "A", name: "액와동맥", kind: "artery", color: "#b03a2e", diameter: 7 },
-  { key: "brachial", code: "B", name: "상완동맥", kind: "artery", color: "#c0392b", diameter: 5 },
-  { key: "radial", code: "C", name: "요골동맥", kind: "artery", color: "#e74c3c", diameter: 2.5 },
-  { key: "ulnar", code: "D", name: "척골동맥", kind: "artery", color: "#a93226", diameter: 2.4 },
-  { key: "cephalic", code: "E", name: "두정맥", kind: "vein", color: "#2e86c1", diameter: 3 },
-  { key: "basilic", code: "F", name: "기저정맥", kind: "vein", color: "#1a5276", diameter: 4 },
-  { key: "median", code: "G", name: "정중주와정맥", kind: "vein", color: "#5dade2", diameter: 3 },
+  { key: "axillary", code: "A", name: "Axillary artery", kind: "artery", color: "#b03a2e", diameter: 7 },
+  { key: "brachial", code: "B", name: "Brachial artery", kind: "artery", color: "#c0392b", diameter: 5 },
+  { key: "radial", code: "C", name: "Radial artery", kind: "artery", color: "#e74c3c", diameter: 2.5 },
+  { key: "ulnar", code: "D", name: "Ulnar artery", kind: "artery", color: "#a93226", diameter: 2.4 },
+  { key: "cephalic", code: "E", name: "Cephalic vein", kind: "vein", color: "#2e86c1", diameter: 3 },
+  { key: "basilic", code: "F", name: "Basilic vein", kind: "vein", color: "#1a5276", diameter: 4 },
+  { key: "median", code: "G", name: "Median cubital vein", kind: "vein", color: "#5dade2", diameter: 3 },
 ];
+
+const KOREAN_NAMES = {
+  "액와동맥": "Axillary artery",
+  "상완동맥": "Brachial artery",
+  "요골동맥": "Radial artery",
+  "척골동맥": "Ulnar artery",
+  "두정맥": "Cephalic vein",
+  "기저정맥": "Basilic vein",
+  "정중주와정맥": "Median cubital vein",
+};
 
 export function createDefaultVessels() {
   const vessels = [];
@@ -102,6 +112,13 @@ export function createDefaultVessels() {
 
 export function cloneVessels(vessels) {
   return JSON.parse(JSON.stringify(vessels));
+}
+
+export function useEnglishNames(vessels) {
+  return vessels.map((vessel) => {
+    const name = KOREAN_NAMES[vessel.name];
+    return name ? { ...vessel, name } : vessel;
+  });
 }
 
 export const BODY_IMAGE = "assets/body-outline.png";
