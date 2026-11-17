@@ -1,4 +1,4 @@
-const KEY = "uddang-vessel-map-v11";
+const KEY = "uddang-vessel-map-v12";
 
 export function loadState() {
   try {

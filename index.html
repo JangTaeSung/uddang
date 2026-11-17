@@ -28,7 +28,7 @@
       <label class="file-btn">윤곽 이미지
         <input id="bg-file" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml">
       </label>
-      <button type="button" id="clear-bg">윤곽 지우기</button>
+      <button type="button" id="clear-bg">기본 윤곽</button>
       <button type="button" id="export-png">PNG</button>
       <button type="button" id="export-svg">SVG</button>
     </div>
@@ -44,11 +44,9 @@
       </div>
     </aside>
     <div class="stage">
-      <svg id="map" viewBox="0 0 1100 700" role="img" aria-label="상지 혈관 도식">
-        <rect width="1100" height="700" fill="#fffdf8"></rect>
-        <image id="bg-image" href="" x="80" y="40" width="940" height="620" preserveAspectRatio="xMidYMid meet" opacity="0"></image>
-        <path id="body-fill" fill="#f4efe6" stroke="none"></path>
-        <path id="body-line" fill="none" stroke="#292524" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path>
+      <svg id="map" viewBox="0 0 583 419" role="img" aria-label="상지 혈관 도식">
+        <rect width="583" height="419" fill="#ffffff"></rect>
+        <image id="bg-image" href="assets/body-outline.png" x="0" y="0" width="583" height="419"></image>
         <g id="vessels"></g>
         <g id="labels"></g>
         <g id="markers"></g>

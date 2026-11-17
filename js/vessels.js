@@ -1,6 +1,37 @@
-/** 상지 혈관 기본 도식. 화면 왼쪽 = 오른팔, 화면 오른쪽 = 왼팔. 위쪽 = 요골(엄지) 쪽. */
+/** 상지 혈관 기본 도식. 화면 왼쪽 = 오른팔, 화면 오른쪽 = 왼팔. 위쪽 = 요골(엄지) 쪽.
+ * 좌표는 assets/body-outline.png (583×419) 위에 맞춘다.
+ */
 
-const CENTER = 550;
+const CENTER = 583 / 2;
+
+const RT_AXIS = [
+  { x: 178, y: 168 },
+  { x: 160, y: 196 },
+  { x: 142, y: 224 },
+  { x: 122, y: 252 },
+  { x: 102, y: 280 },
+  { x: 82, y: 306 },
+  { x: 62, y: 330 },
+  { x: 48, y: 346 },
+];
+
+function offsetPath(points, amount) {
+  return points.map((point, index) => {
+    const prev = points[Math.max(0, index - 1)];
+    const next = points[Math.min(points.length - 1, index + 1)];
+    const dx = next.x - prev.x;
+    const dy = next.y - prev.y;
+    const length = Math.hypot(dx, dy) || 1;
+    return {
+      x: Math.round((point.x + (-dy / length) * amount) * 10) / 10,
+      y: Math.round((point.y + (dx / length) * amount) * 10) / 10,
+    };
+  });
+}
+
+function sliceAxis(start, end, amount) {
+  return offsetPath(RT_AXIS.slice(start, end), amount);
+}
 
 function mirrorX(points) {
   return points.map((p) => ({ x: CENTER * 2 - p.x, y: p.y }));
@@ -22,41 +53,15 @@ function withHandles(raw) {
 
 const ARM = {
   rt: {
-    axillary: [
-      { x: 360, y: 230 },
-      { x: 300, y: 275 },
-    ],
-    brachial: [
-      { x: 300, y: 275 },
-      { x: 230, y: 350 },
-      { x: 195, y: 400 },
-    ],
-    radial: [
-      { x: 195, y: 400 },
-      { x: 145, y: 465 },
-      { x: 105, y: 520 },
-    ],
-    ulnar: [
-      { x: 195, y: 400 },
-      { x: 185, y: 470 },
-      { x: 165, y: 535 },
-    ],
-    cephalic: [
-      { x: 325, y: 195 },
-      { x: 250, y: 280 },
-      { x: 175, y: 375 },
-      { x: 115, y: 470 },
-    ],
-    basilic: [
-      { x: 390, y: 255 },
-      { x: 310, y: 330 },
-      { x: 250, y: 415 },
-      { x: 210, y: 500 },
-    ],
+    axillary: sliceAxis(0, 3, -3),
+    brachial: sliceAxis(1, 5, -1),
+    radial: sliceAxis(4, 8, 8),
+    ulnar: sliceAxis(4, 8, -8),
+    cephalic: sliceAxis(0, 8, 13),
+    basilic: sliceAxis(1, 8, -12),
     median: [
-      { x: 175, y: 375 },
-      { x: 230, y: 400 },
-      { x: 250, y: 415 },
+      ...sliceAxis(4, 5, 13),
+      ...sliceAxis(4, 5, -12),
     ],
   },
 };
@@ -99,7 +104,6 @@ export function cloneVessels(vessels) {
   return JSON.parse(JSON.stringify(vessels));
 }
 
-export const BODY_LINE =
-  "M 508 55 L 490 130 Q 400 150 330 185 Q 240 250 175 360 Q 120 450 78 515 L 132 548 Q 175 450 230 370 Q 290 290 340 250 L 420 300 L 550 328 L 680 300 L 760 250 Q 810 290 870 370 Q 925 450 968 548 L 1022 515 Q 980 450 925 360 Q 860 250 770 185 Q 700 150 610 130 L 592 55";
-
-export const BODY_FILL = `${BODY_LINE} Z`;
+export const BODY_IMAGE = "assets/body-outline.png";
+export const MAP_WIDTH = 583;
+export const MAP_HEIGHT = 419;

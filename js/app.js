@@ -1,4 +1,4 @@
-import { BODY_FILL, BODY_LINE, cloneVessels, createDefaultVessels } from "./vessels.js";
+import { BODY_IMAGE, MAP_HEIGHT, MAP_WIDTH, cloneVessels, createDefaultVessels } from "./vessels.js";
 import { clearState, loadState, saveState } from "./storage.js";
 
 const svg = document.querySelector("#map");
@@ -33,9 +33,7 @@ const MARKERS = {
   branch: { label: "Br", fill: "#2e7d32" },
 };
 
-document.querySelector("#body-line").setAttribute("d", BODY_LINE);
-document.querySelector("#body-fill").setAttribute("d", BODY_FILL);
-for (const id of ["bg-image", "body-fill", "body-line"]) {
+for (const id of ["bg-image"]) {
   document.querySelector(`#${id}`).style.pointerEvents = "none";
 }
 
@@ -96,7 +94,7 @@ function displayColor(vessel) {
 }
 
 function strokeWidth(vessel) {
-  const base = Math.max(1.6, Number(vessel.diameter) * 1.7);
+  const base = Math.max(1.2, Number(vessel.diameter) * 1.05);
   if (vessel.style === "considerable") return base * 1.55;
   if (vessel.style === "borderline") return Math.max(1.4, base * 0.75);
   return base;
@@ -119,19 +117,8 @@ function curvePath(points) {
 
 function renderBackground() {
   const image = document.querySelector("#bg-image");
-  const fill = document.querySelector("#body-fill");
-  const line = document.querySelector("#body-line");
-  if (state.background) {
-    image.setAttribute("href", state.background);
-    image.setAttribute("opacity", "1");
-    fill.setAttribute("opacity", "0");
-    line.setAttribute("opacity", "0.35");
-  } else {
-    image.setAttribute("href", "");
-    image.setAttribute("opacity", "0");
-    fill.setAttribute("opacity", "1");
-    line.setAttribute("opacity", "1");
-  }
+  image.setAttribute("href", state.background || BODY_IMAGE);
+  image.setAttribute("opacity", "1");
 }
 
 function renderList() {
@@ -196,14 +183,14 @@ function renderVessels() {
     visual.setAttribute("pointer-events", "none");
     vesselLayer.append(hit, visual);
 
-    const end = vessel.points[vessel.points.length - 1];
+    const end = vessel.points[Math.max(0, vessel.points.length - 2)];
     const outward = vessel.side === "rt" ? -1 : 1;
-    const stack = { A: -16, B: -4, C: -22, D: 12, E: -30, F: 18, G: 4 }[vessel.code] || 0;
+    const stack = { A: -7, B: 0, C: -9, D: 6, E: -12, F: 8, G: 2 }[vessel.code] || 0;
     const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    text.setAttribute("x", String(end.x + outward * 14));
+    text.setAttribute("x", String(end.x + outward * 4));
     text.setAttribute("y", String(end.y + stack));
     text.setAttribute("text-anchor", vessel.side === "rt" ? "end" : "start");
-    text.setAttribute("font-size", "12");
+    text.setAttribute("font-size", "9");
     text.setAttribute("fill", "#44403c");
     text.setAttribute("pointer-events", "none");
     text.textContent = `${vessel.code} ${vessel.diameter}`;
@@ -550,8 +537,8 @@ function exportSvgNode() {
   const clone = svg.cloneNode(true);
   clone.querySelector("#handles")?.remove();
   clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-  clone.setAttribute("width", "1100");
-  clone.setAttribute("height", "700");
+  clone.setAttribute("width", String(MAP_WIDTH));
+  clone.setAttribute("height", String(MAP_HEIGHT));
   return clone;
 }
 
@@ -566,8 +553,8 @@ document.querySelector("#export-png").addEventListener("click", () => {
   const url = URL.createObjectURL(new Blob([xml], { type: "image/svg+xml" }));
   image.onload = () => {
     const canvas = document.createElement("canvas");
-    canvas.width = 2200;
-    canvas.height = 1400;
+    canvas.width = MAP_WIDTH * 2;
+    canvas.height = MAP_HEIGHT * 2;
     const context = canvas.getContext("2d");
     context.fillStyle = "#fffdf8";
     context.fillRect(0, 0, canvas.width, canvas.height);
