@@ -27,6 +27,8 @@ const state = {
   selectedMarkerId: null,
 };
 
+const view = { x: 0, y: 0, width: MAP_WIDTH, height: MAP_HEIGHT };
+
 const history = [];
 let historyIndex = -1;
 let drag = null;
@@ -77,6 +79,43 @@ function restore(snap) {
   state.background = data.background || "";
   persist();
   render();
+}
+
+function applyView() {
+  svg.setAttribute("viewBox", `${view.x} ${view.y} ${view.width} ${view.height}`);
+}
+
+function clampView() {
+  if (view.width >= MAP_WIDTH - 0.5) {
+    view.x = 0;
+    view.y = 0;
+    view.width = MAP_WIDTH;
+    view.height = MAP_HEIGHT;
+    return;
+  }
+  const minX = -view.width * 0.2;
+  const minY = -view.height * 0.2;
+  view.x = Math.min(MAP_WIDTH - view.width * 0.3, Math.max(minX, view.x));
+  view.y = Math.min(MAP_HEIGHT - view.height * 0.3, Math.max(minY, view.y));
+}
+
+function zoomAt(clientX, clientY, factor) {
+  const point = svgPoint({ clientX, clientY });
+  const nextWidth = Math.min(MAP_WIDTH, Math.max(MAP_WIDTH / 5, view.width / factor));
+  const nextHeight = nextWidth * (MAP_HEIGHT / MAP_WIDTH);
+  const rx = (point.x - view.x) / view.width;
+  const ry = (point.y - view.y) / view.height;
+  view.width = nextWidth;
+  view.height = nextHeight;
+  view.x = point.x - rx * nextWidth;
+  view.y = point.y - ry * nextHeight;
+  clampView();
+  applyView();
+}
+
+function zoomBy(factor) {
+  const box = svg.getBoundingClientRect();
+  zoomAt(box.left + box.width / 2, box.top + box.height / 2, factor);
 }
 
 function svgPoint(event) {
@@ -694,28 +733,31 @@ function renderVessels() {
   }
   for (const side of ["rt", "lt"]) {
     const items = labels.filter((item) => item.side === side).sort((a, b) => a.prefer - b.prefer);
-    const column = side === "rt" ? 206 : MAP_WIDTH - 206;
-    let lastY = -999;
+    const onLeft = side === "rt";
+    const textX = onLeft ? 8 : MAP_WIDTH - 8;
+    let y = 16;
     for (const item of items) {
-      const y = Math.max(item.prefer, lastY + 12);
-      lastY = y;
       const leader = document.createElementNS("http://www.w3.org/2000/svg", "line");
       leader.setAttribute("x1", String(item.x));
       leader.setAttribute("y1", String(item.y));
-      leader.setAttribute("x2", String(column));
-      leader.setAttribute("y2", String(y));
+      leader.setAttribute("x2", String(onLeft ? textX + 4 : textX - 4));
+      leader.setAttribute("y2", String(y - 2));
       leader.setAttribute("stroke", "#a8a29e");
       leader.setAttribute("stroke-width", "0.6");
       leader.setAttribute("pointer-events", "none");
       const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      text.setAttribute("x", String(column + (side === "rt" ? 3 : -3)));
-      text.setAttribute("y", String(y + 3));
-      text.setAttribute("text-anchor", side === "rt" ? "start" : "end");
+      text.setAttribute("x", String(textX));
+      text.setAttribute("y", String(y));
+      text.setAttribute("text-anchor", onLeft ? "start" : "end");
       text.setAttribute("font-size", "8");
       text.setAttribute("fill", "#44403c");
+      text.setAttribute("stroke", "#fffdf8");
+      text.setAttribute("stroke-width", "3");
+      text.setAttribute("paint-order", "stroke");
       text.setAttribute("pointer-events", "none");
       text.textContent = item.name;
       labelLayer.append(leader, text);
+      y += 13;
     }
   }
   joinOutlines(outlines);
@@ -1059,6 +1101,11 @@ function onPointerDown(event) {
   } else if (state.mode === "marker") {
     addMarker(point);
     return;
+  } else if (state.mode === "path" && isMapBackground(target)) {
+    state.selectedVesselId = null;
+    state.selectedPoint = null;
+    state.selectedMarkerId = null;
+    drag = { kind: "pan", cx: event.clientX, cy: event.clientY, ox: event.clientX, oy: event.clientY, moved: false };
   } else if (!target.closest("#cursor-menu")) {
     state.selectedVesselId = null;
     state.selectedPoint = null;
@@ -1068,8 +1115,26 @@ function onPointerDown(event) {
   render();
 }
 
+function isMapBackground(target) {
+  if (!(target instanceof Element)) return false;
+  const name = target.tagName.toLowerCase();
+  return target === svg || target.id === "bg-image" || name === "rect";
+}
+
 function onPointerMove(event) {
   if (!drag) return;
+  if (drag.kind === "pan") {
+    const dx = (event.clientX - drag.cx) * (view.width / svg.clientWidth);
+    const dy = (event.clientY - drag.cy) * (view.height / svg.clientHeight);
+    if (Math.hypot(event.clientX - drag.ox, event.clientY - drag.oy) > 3) drag.moved = true;
+    view.x -= dx;
+    view.y -= dy;
+    drag.cx = event.clientX;
+    drag.cy = event.clientY;
+    clampView();
+    applyView();
+    return;
+  }
   const point = svgPoint(event);
   if (drag.kind === "paint") {
     const stroke = state.paint.find((item) => item.id === drag.id);
@@ -1148,6 +1213,10 @@ function onPointerUp(event) {
   if (!drag) return;
   const finished = drag;
   drag = null;
+  if (finished.kind === "pan") {
+    if (!finished.moved) render();
+    return;
+  }
   if (finished.kind === "sculpt" && !finished.moved) {
     const vessel = vesselById(finished.id);
     if (vessel && event) showCursorMenu(event, vessel, finished.hit);
@@ -1479,6 +1548,19 @@ document.querySelector("#paint-color").addEventListener("input", (event) => {
 });
 document.querySelector("#paint-size").addEventListener("input", (event) => {
   state.paintSize = Number(event.target.value) || 6;
+});
+svg.addEventListener("wheel", (event) => {
+  event.preventDefault();
+  zoomAt(event.clientX, event.clientY, event.deltaY < 0 ? 1.15 : 1 / 1.15);
+}, { passive: false });
+document.querySelector("#zoom-in").addEventListener("click", () => zoomBy(1.25));
+document.querySelector("#zoom-out").addEventListener("click", () => zoomBy(1 / 1.25));
+document.querySelector("#zoom-reset").addEventListener("click", () => {
+  view.x = 0;
+  view.y = 0;
+  view.width = MAP_WIDTH;
+  view.height = MAP_HEIGHT;
+  applyView();
 });
 document.querySelector("#vessels-all").addEventListener("click", () => setAllVisible(true));
 document.querySelector("#vessels-none").addEventListener("click", () => setAllVisible(false));
