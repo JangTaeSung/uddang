@@ -723,41 +723,51 @@ function renderVessels() {
       labelLayer.append(text);
     } else {
       labels.push({
+        id: vessel.id,
         side: vessel.side,
         name: vessel.name,
         x: anchor.x,
         y: anchor.y,
         prefer: anchor.y + (vessel.labelDy || 0),
+        labelX: vessel.labelX,
+        labelY: vessel.labelY,
       });
     }
   }
   for (const side of ["rt", "lt"]) {
     const items = labels.filter((item) => item.side === side).sort((a, b) => a.prefer - b.prefer);
     const onLeft = side === "rt";
-    const textX = onLeft ? 8 : MAP_WIDTH - 8;
-    let y = 16;
+    const columnX = onLeft ? 10 : MAP_WIDTH - 10;
+    let stackY = 124;
     for (const item of items) {
+      const placed = Number.isFinite(item.labelX) && Number.isFinite(item.labelY);
+      const textX = placed ? item.labelX : columnX;
+      const textY = placed ? item.labelY : stackY;
+      if (!placed) stackY += 14;
+      const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      text.setAttribute("x", String(textX));
+      text.setAttribute("y", String(textY));
+      text.setAttribute("text-anchor", onLeft ? "start" : "end");
+      text.setAttribute("font-size", "9");
+      text.setAttribute("fill", "#44403c");
+      text.setAttribute("stroke", "#fffdf8");
+      text.setAttribute("stroke-width", "2.5");
+      text.setAttribute("paint-order", "stroke");
+      text.dataset.label = item.id;
+      text.style.cursor = "grab";
+      text.textContent = item.name;
+      labelLayer.append(text);
+      const width = text.getComputedTextLength();
       const leader = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      leader.dataset.leader = item.id;
       leader.setAttribute("x1", String(item.x));
       leader.setAttribute("y1", String(item.y));
-      leader.setAttribute("x2", String(onLeft ? textX + 4 : textX - 4));
-      leader.setAttribute("y2", String(y - 2));
+      leader.setAttribute("x2", String(onLeft ? textX + width + 2 : textX - width - 2));
+      leader.setAttribute("y2", String(textY - 3));
       leader.setAttribute("stroke", "#a8a29e");
       leader.setAttribute("stroke-width", "0.6");
       leader.setAttribute("pointer-events", "none");
-      const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      text.setAttribute("x", String(textX));
-      text.setAttribute("y", String(y));
-      text.setAttribute("text-anchor", onLeft ? "start" : "end");
-      text.setAttribute("font-size", "8");
-      text.setAttribute("fill", "#44403c");
-      text.setAttribute("stroke", "#fffdf8");
-      text.setAttribute("stroke-width", "3");
-      text.setAttribute("paint-order", "stroke");
-      text.setAttribute("pointer-events", "none");
-      text.textContent = item.name;
-      labelLayer.append(leader, text);
-      y += 13;
+      labelLayer.insertBefore(leader, text);
     }
   }
   joinOutlines(outlines);
@@ -1056,6 +1066,19 @@ function onPointerDown(event) {
   if (target.closest("#cursor-menu")) return;
   const point = svgPoint(event);
   hideCursorMenu();
+  const labelHit = target.closest?.("[data-label]");
+  if (labelHit) {
+    const id = labelHit.dataset.label;
+    drag = {
+      kind: "label",
+      id,
+      dx: point.x - Number(labelHit.getAttribute("x")),
+      dy: point.y - Number(labelHit.getAttribute("y")),
+    };
+    labelHit.style.cursor = "grabbing";
+    if (svg.contains(labelHit)) svg.setPointerCapture(event.pointerId);
+    return;
+  }
   if (state.mode === "paint" && (event.target === svg || svg.contains(event.target))) {
     if (state.erasing) {
       drag = { kind: "erase" };
@@ -1123,6 +1146,24 @@ function isMapBackground(target) {
 
 function onPointerMove(event) {
   if (!drag) return;
+  if (drag.kind === "label") {
+    const point = svgPoint(event);
+    const vessel = vesselById(drag.id);
+    const text = labelLayer.querySelector(`[data-label="${drag.id}"]`);
+    const leader = labelLayer.querySelector(`[data-leader="${drag.id}"]`);
+    if (!vessel || !text || !leader) return;
+    const x = point.x - drag.dx;
+    const y = point.y - drag.dy;
+    vessel.labelX = x;
+    vessel.labelY = y;
+    text.setAttribute("x", String(x));
+    text.setAttribute("y", String(y));
+    const width = text.getComputedTextLength();
+    const towardRight = text.getAttribute("text-anchor") !== "end";
+    leader.setAttribute("x2", String(towardRight ? x + width + 2 : x - width - 2));
+    leader.setAttribute("y2", String(y - 3));
+    return;
+  }
   if (drag.kind === "pan") {
     const dx = (event.clientX - drag.cx) * (view.width / svg.clientWidth);
     const dy = (event.clientY - drag.cy) * (view.height / svg.clientHeight);
