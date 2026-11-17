@@ -720,36 +720,66 @@ function pencilJitter(index, salt) {
   return n - Math.floor(n);
 }
 
+function pencilPoint(stroke, index, shift, salt, size) {
+  const point = stroke.points[index];
+  const prev = stroke.points[Math.max(0, index - 1)];
+  const next = stroke.points[Math.min(stroke.points.length - 1, index + 1)];
+  const tx = next.x - prev.x;
+  const ty = next.y - prev.y;
+  const length = Math.hypot(tx, ty) || 1;
+  const nx = -ty / length;
+  const ny = tx / length;
+  const wobble = (pencilJitter(index, salt) - 0.5) * size * 0.55;
+  const skip = (pencilJitter(index, salt + 2.2) - 0.5) * size * 0.18;
+  const along = tx / length;
+  const up = ty / length;
+  return {
+    x: point.x + nx * (shift * size + wobble) + along * skip,
+    y: point.y + ny * (shift * size + wobble) + up * skip,
+  };
+}
+
 function renderPaint() {
   paintLayer.replaceChildren();
+  const hairs = [
+    { salt: 1.3, shift: 0, width: 0.34, opacity: 0.72 },
+    { salt: 4.8, shift: -0.34, width: 0.16, opacity: 0.46 },
+    { salt: 7.6, shift: 0.34, width: 0.14, opacity: 0.4 },
+    { salt: 11.4, shift: 0.08, width: 0.1, opacity: 0.28 },
+  ];
   for (const stroke of state.paint) {
     if (!stroke.points || stroke.points.length < 2) continue;
-    const size = stroke.size || 3;
-    const passes = [
-      { salt: 1.2, width: size, opacity: 0.82, scale: 0.28 },
-      { salt: 4.7, width: Math.max(0.8, size * 0.5), opacity: 0.38, scale: 0.55 },
-    ];
-    for (const pass of passes) {
-      const points = stroke.points.map((point, index) => {
-        const prev = stroke.points[Math.max(0, index - 1)];
-        const next = stroke.points[Math.min(stroke.points.length - 1, index + 1)];
-        const tx = next.x - prev.x;
-        const ty = next.y - prev.y;
-        const length = Math.hypot(tx, ty) || 1;
-        const offset = (pencilJitter(index, pass.salt) - 0.5) * size * pass.scale;
-        return `${point.x + (-ty / length) * offset},${point.y + (tx / length) * offset}`;
-      });
+    const size = Math.max(1.4, stroke.size || 6);
+    const color = stroke.color || "#2b2b2b";
+    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    group.setAttribute("pointer-events", "none");
+    for (const hair of hairs) {
       const path = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-      path.setAttribute("points", points.join(" "));
+      path.setAttribute("points", stroke.points.map((_, index) => {
+        const at = pencilPoint(stroke, index, hair.shift, hair.salt, size);
+        return `${at.x},${at.y}`;
+      }).join(" "));
       path.setAttribute("fill", "none");
-      path.setAttribute("stroke", stroke.color || "#2b2b2b");
-      path.setAttribute("stroke-width", String(pass.width));
-      path.setAttribute("stroke-opacity", String(pass.opacity));
+      path.setAttribute("stroke", color);
+      path.setAttribute("stroke-width", String(Math.max(0.45, size * hair.width)));
+      path.setAttribute("stroke-opacity", String(hair.opacity));
       path.setAttribute("stroke-linecap", "round");
       path.setAttribute("stroke-linejoin", "round");
-      path.setAttribute("pointer-events", "none");
-      paintLayer.append(path);
+      group.append(path);
     }
+    for (let index = 0; index < stroke.points.length; index += 2) {
+      const grain = pencilJitter(index, 13.7);
+      if (grain < 0.42) continue;
+      const at = pencilPoint(stroke, index, (grain - 0.5) * 0.8, 17.2, size);
+      const speck = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      speck.setAttribute("cx", String(at.x));
+      speck.setAttribute("cy", String(at.y));
+      speck.setAttribute("r", String(Math.max(0.25, size * (0.035 + grain * 0.05))));
+      speck.setAttribute("fill", color);
+      speck.setAttribute("fill-opacity", String(0.18 + grain * 0.35));
+      group.append(speck);
+    }
+    paintLayer.append(group);
   }
 }
 
