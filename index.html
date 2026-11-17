@@ -61,9 +61,15 @@
     </aside>
     <div class="stage">
       <div class="zoom-tools">
-        <button type="button" id="zoom-in">확대</button>
-        <button type="button" id="zoom-out">축소</button>
-        <button type="button" id="zoom-reset">맞춤</button>
+        <button type="button" id="zoom-out" aria-label="축소">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6.2"/><path d="M14.8 14.8 L20 20"/><path d="M7.2 10 h5.6"/></svg>
+        </button>
+        <button type="button" id="zoom-in" aria-label="확대">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6.2"/><path d="M14.8 14.8 L20 20"/><path d="M7.2 10 h5.6"/><path d="M10 7.2 v5.6"/></svg>
+        </button>
+        <button type="button" id="zoom-reset" aria-label="맞춤">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9 V4 H9"/><path d="M15 4 H20 V9"/><path d="M20 15 V20 H15"/><path d="M9 20 H4 V15"/></svg>
+        </button>
       </div>
       <svg id="map" viewBox="0 0 583 419" role="img" aria-label="상지 혈관 도식">
         <rect width="583" height="419" fill="#ffffff"></rect>
