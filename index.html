@@ -13,8 +13,8 @@
       <p>화면 왼쪽이 오른팔, 오른쪽이 왼팔입니다. 위쪽이 요골(엄지) 쪽입니다.</p>
     </div>
     <div class="tools">
-      <button type="button" id="mode-path" class="mode-btn active">경로 편집</button>
-      <button type="button" id="mode-branch" class="mode-btn" title="혈관 중간을 누른 채 끌어 가지를 뺍니다">가지 따기</button>
+      <button type="button" id="mode-path" class="mode-btn active">구부리기</button>
+      <button type="button" id="mode-paint" class="mode-btn">칠하기</button>
       <button type="button" id="mode-marker" class="mode-btn">표식</button>
       <select id="marker-type" disabled>
         <option value="borderline">보더라인</option>
@@ -22,6 +22,14 @@
         <option value="bend">굽힘</option>
         <option value="branch">분지 (Br)</option>
       </select>
+      <span id="paint-tools" hidden>
+        <button type="button" class="paint-color" data-color="#6e1b1b">혈전</button>
+        <button type="button" class="paint-color" data-color="#d35400">협착</button>
+        <button type="button" class="paint-color" data-color="#1e8449">표시</button>
+        <input id="paint-color" type="color" value="#6e1b1b" aria-label="붓 색">
+        <input id="paint-size" type="range" min="3" max="28" value="8" aria-label="붓 크기">
+        <button type="button" id="paint-erase">지우개</button>
+      </span>
       <button type="button" id="undo" disabled>되돌리기</button>
       <button type="button" id="redo" disabled>다시 실행</button>
     </div>
@@ -50,16 +58,18 @@
         <image id="bg-image" href="assets/body-outline.png" x="0" y="0" width="583" height="419"></image>
         <g id="vessels"></g>
         <g id="labels"></g>
+        <g id="paint"></g>
         <g id="markers"></g>
         <g id="handles"></g>
       </svg>
     </div>
     <section class="inspector">
       <h2 id="inspect-title" style="margin:0 0 8px;font-size:16px">혈관을 선택하세요</h2>
-      <p class="hint" id="inspect-hint">왼쪽 체크를 켜면 혈관이 나타납니다. 가지 따기를 누른 뒤 혈관 중간을 끌어 가지를 뺍니다.</p>
+      <p class="hint" id="inspect-hint">왼쪽 체크를 켜면 혈관이 나타납니다. 선을 끌면 그 부분이 구부러지고, 클릭하면 그 자리에 가지 추가가 뜹니다.</p>
       <div id="vessel-fields" hidden>
         <label class="field"><span>이름</span><input id="field-name" type="text"></label>
-        <label class="field"><span>직경 (mm)</span><input id="field-diameter" type="number" min="0.4" max="40" step="0.1"></label>
+        <label class="field"><span>기본 직경 (mm)</span><input id="field-diameter" type="number" min="0.4" max="40" step="0.1"></label>
+        <label class="field" id="point-width-field" hidden><span>이 지점 직경 (mm)</span><input id="field-point-width" type="number" min="0.4" max="40" step="0.1"></label>
         <label class="field"><span>색</span><input id="field-color" type="color"></label>
         <label class="field"><span>구간 스타일</span>
           <select id="field-style">
@@ -70,9 +80,7 @@
         </label>
         <label class="row"><input id="field-visible" type="checkbox"> 표시</label>
         <div class="tools" style="margin-top:10px">
-          <button type="button" id="add-point">점 추가</button>
           <button type="button" id="delete-point">점 삭제</button>
-          <button type="button" id="add-branch">중간에서 가지</button>
           <button type="button" id="delete-branch" hidden>가지 삭제</button>
           <button type="button" id="reset-vessel">이 혈관 초기화</button>
         </div>
@@ -86,6 +94,9 @@
       </div>
     </section>
   </main>
+  <div id="cursor-menu" hidden>
+    <button type="button" id="menu-branch" title="누른 채 끌면 그 자리에서 가지가 나갑니다">가지 추가</button>
+  </div>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

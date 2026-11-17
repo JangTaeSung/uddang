@@ -173,10 +173,12 @@ export const MAP_WIDTH = 583;
 export const MAP_HEIGHT = 419;
 
 function bezierControls(a, b) {
+  const incomingX = Number.isFinite(b.ix) ? b.ix : -b.hx;
+  const incomingY = Number.isFinite(b.iy) ? b.iy : -b.hy;
   return {
     p0: a,
     c1: { x: a.x + a.hx, y: a.y + a.hy },
-    c2: { x: b.x - b.hx, y: b.y - b.hy },
+    c2: { x: b.x + incomingX, y: b.y + incomingY },
     p1: b,
   };
 }

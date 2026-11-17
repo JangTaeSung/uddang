@@ -17,6 +17,7 @@ export function saveState(state) {
     vessels: state.vessels,
     markers: state.markers,
     background: state.background,
+    paint: state.paint,
   };
   localStorage.setItem(KEY, JSON.stringify(payload));
 }

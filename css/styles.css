@@ -112,9 +112,45 @@ svg#map {
   touch-action: none;
 }
 
-svg#map.branch-mode {
+svg#map.paint-mode {
   cursor: crosshair;
 }
+
+#cursor-menu {
+  position: fixed;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #d6d3d1;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(28, 25, 23, 0.16);
+}
+
+#cursor-menu[hidden] { display: none; }
+
+#cursor-menu button {
+  white-space: nowrap;
+}
+
+#paint-tools {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+#paint-tools[hidden] { display: none; }
+
+.paint-color.active-color,
+#paint-erase.active {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+
+#paint-size { width: 84px; }
 
 .group-title {
   margin: 12px 0 6px;
