@@ -162,12 +162,12 @@ function descendantIds(id) {
 
 function vesselsInOrder(side) {
   const rows = [];
-  const visit = (vessel, depth) => {
-    rows.push({ vessel, depth });
-    for (const child of state.vessels) {
-      if (child.parentId === vessel.id) visit(child, depth + 1);
-    }
-  };
+    const visit = (vessel, depth) => {
+      if (!vessel.fixed) rows.push({ vessel, depth });
+      for (const child of state.vessels) {
+        if (child.parentId === vessel.id) visit(child, vessel.fixed ? depth : depth + 1);
+      }
+    };
   for (const vessel of state.vessels) {
     if (vessel.side === side && !vessel.parentId) visit(vessel, 0);
   }
@@ -350,12 +350,19 @@ function appendVessel(vessel) {
 }
 
 function setAllVisible(visible) {
-  for (const vessel of state.vessels) vessel.visible = visible;
+  for (const vessel of state.vessels) {
+    if (vessel.fixed) {
+      vessel.visible = true;
+      continue;
+    }
+    vessel.visible = visible;
+  }
   if (!visible) state.selectedPoint = null;
   commit();
 }
 
 function setVisible(vessel, visible) {
+  if (vessel.fixed && !visible) return;
   vessel.visible = visible;
   if (visible) {
     let parent = vesselById(vessel.parentId);
@@ -874,6 +881,7 @@ function renderInspector() {
       hint.textContent = "선을 끌면 그 부분이 구부러집니다. 점을 고르면 다음 구간을 실선이나 점선으로 바꾸고, 그 지점의 직경 숫자를 옆에 켤 수 있습니다.";
     }
     document.querySelector("#toggle-diameters").textContent = vessel.points.every((point) => point.diameterLabel) ? "직경 숫자 숨기기" : "구간 직경 표시";
+    document.querySelector("#field-visible").closest("label").hidden = Boolean(vessel.fixed);
     if (!editingField) {
       document.querySelector("#field-name").value = vessel.name;
       document.querySelector("#field-diameter").value = String(vessel.diameter);
@@ -895,7 +903,7 @@ function renderInspector() {
     title.textContent = drawing ? drawName : "혈관을 선택하세요";
     hint.textContent = drawing
       ? drawHint
-      : "주요 동맥과 얕은 정맥이 켜져 있습니다. 선을 끌면 구부러지고, 클릭하면 그 자리에 가지 추가가 뜹니다. 깊은 정맥은 왼쪽에서 켭니다.";
+      : "기본 혈관은 항상 표시됩니다. 두정맥과 깊은 정맥은 왼쪽에서 켜고, 선을 끌면 구부러지며, 클릭하면 가지 추가가 뜹니다.";
   }
   document.querySelector("#mode-path").classList.toggle("active", state.mode === "path");
   document.querySelector("#mode-paint").classList.toggle("active", drawing && state.paintTool !== "highlighter");
