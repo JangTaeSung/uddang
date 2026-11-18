@@ -15,6 +15,7 @@
     <div class="tools">
       <button type="button" id="mode-path" class="mode-btn active">구부리기</button>
       <button type="button" id="mode-paint" class="mode-btn">연필</button>
+      <button type="button" id="mode-highlight" class="mode-btn">형광펜</button>
       <button type="button" id="mode-marker" class="mode-btn">표식</button>
       <select id="marker-type" disabled>
         <option value="borderline">보더라인</option>
@@ -23,14 +24,11 @@
         <option value="branch">분지 (Br)</option>
       </select>
       <span id="paint-tools" hidden>
-        <button type="button" class="paint-color" data-color="#2b2b2b" title="검정" style="background:#2b2b2b"></button>
-        <button type="button" class="paint-color" data-color="#c0392b" title="빨강" style="background:#c0392b"></button>
-        <button type="button" class="paint-color" data-color="#1a5276" title="파랑" style="background:#1a5276"></button>
-        <button type="button" class="paint-color" data-color="#1e8449" title="초록" style="background:#1e8449"></button>
-        <button type="button" class="paint-color" data-color="#6e1b1b" title="혈전" style="background:#6e1b1b"></button>
-        <button type="button" class="paint-color" data-color="#d35400" title="협착" style="background:#d35400"></button>
-        <input id="paint-color" type="color" value="#2b2b2b" aria-label="연필 색">
-        <input id="paint-size" type="range" min="1" max="18" value="6" aria-label="연필 굵기">
+        <button type="button" class="paint-mark" data-mark="thrombosis">Thrombosis</button>
+        <button type="button" class="paint-mark" data-mark="consideration">Consideration</button>
+        <button type="button" class="paint-mark" data-mark="borderline">Borderline</button>
+        <input id="paint-color" type="color" value="#2b2b2b" aria-label="칠하기 색">
+        <input id="paint-size" type="range" min="1" max="18" value="6" aria-label="칠하기 굵기">
         <button type="button" id="paint-erase">지우개</button>
       </span>
       <button type="button" id="undo" disabled>되돌리기</button>
@@ -75,19 +73,27 @@
         <rect width="583" height="419" fill="#ffffff"></rect>
         <image id="bg-image" href="assets/body-outline.png" x="0" y="0" width="583" height="419"></image>
         <g id="vessels"></g>
-        <g id="labels"></g>
         <g id="paint"></g>
+        <g id="labels"></g>
         <g id="markers"></g>
         <g id="handles"></g>
       </svg>
     </div>
     <section class="inspector">
       <h2 id="inspect-title" style="margin:0 0 8px;font-size:16px">혈관을 선택하세요</h2>
-      <p class="hint" id="inspect-hint">왼쪽 체크를 켜면 혈관이 나타납니다. 선을 끌면 그 부분이 구부러지고, 클릭하면 그 자리에 가지 추가가 뜹니다.</p>
+      <p class="hint" id="inspect-hint">왼쪽 체크를 켜면 혈관이 나타납니다. 선을 끌면 그 부분이 구부러지고, 점을 고르면 다음 구간을 실선이나 점선으로 바꿉니다.</p>
       <div id="vessel-fields" hidden>
         <label class="field"><span>이름</span><input id="field-name" type="text"></label>
         <label class="field"><span>기본 직경 (mm)</span><input id="field-diameter" type="number" min="0.4" max="40" step="0.1"></label>
         <label class="field" id="point-width-field" hidden><span>이 지점 직경 (mm)</span><input id="field-point-width" type="number" min="0.4" max="40" step="0.1"></label>
+        <label class="field" id="segment-dash-field" hidden><span>다음 구간</span>
+          <select id="field-segment-dash">
+            <option value="solid">실선</option>
+            <option value="dashed">점선</option>
+          </select>
+        </label>
+        <label class="row" id="diameter-label-field" hidden><input id="field-diameter-label" type="checkbox"> 옆에 직경 숫자</label>
+        <button type="button" id="toggle-diameters">구간 직경 표시</button>
         <label class="field"><span>색</span><input id="field-color" type="color"></label>
         <label class="field"><span>구간 스타일</span>
           <select id="field-style">

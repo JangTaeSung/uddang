@@ -171,18 +171,12 @@ svg#map.paint-mode {
 
 #paint-tools[hidden] { display: none; }
 
-.paint-color {
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border-radius: 50%;
-  border: 2px solid #fff;
-  box-shadow: 0 0 0 1px #d6d3d1;
+.paint-mark {
+  padding: 4px 8px;
+  font-size: 12px;
 }
 
-.paint-color.active-color {
-  box-shadow: 0 0 0 2px var(--ink);
-}
+#paint-size { width: 84px; }
 
 #paint-erase.active {
   background: var(--ink);
@@ -190,7 +184,7 @@ svg#map.paint-mode {
   border-color: var(--ink);
 }
 
-#paint-size { width: 84px; }
+#toggle-diameters { margin: 4px 0 10px; }
 
 .list-actions {
   display: flex;
