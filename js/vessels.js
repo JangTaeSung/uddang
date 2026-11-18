@@ -92,13 +92,13 @@ const ARM = {
 };
 
 const CATALOG = [
-  { key: "axillary", code: "A", name: "Axillary artery", kind: "artery", color: "#c0392b", diameter: 5, visible: true, labelAt: 0, labelDy: -2 },
-  { key: "brachial", code: "B", name: "Brachial artery", kind: "artery", color: "#e74c3c", diameter: 4.5, visible: true, labelAt: 1, labelDy: -4 },
-  { key: "radial", code: "C", name: "Radial artery", kind: "artery", color: "#e74c3c", diameter: 2.5, visible: true, labelAt: 2, labelDy: -2 },
-  { key: "ulnar", code: "D", name: "Ulnar artery", kind: "artery", color: "#c0392b", diameter: 2.5, visible: true, labelAt: 2, labelDy: 8 },
+  { key: "axillary", code: "A", name: "Axillary artery", kind: "artery", color: "#c0392b", diameter: 5, visible: true, fixed: true, labelAt: 0, labelDy: -2 },
+  { key: "brachial", code: "B", name: "Brachial artery", kind: "artery", color: "#e74c3c", diameter: 4.5, visible: true, fixed: true, labelAt: 1, labelDy: -4 },
+  { key: "radial", code: "C", name: "Radial artery", kind: "artery", color: "#e74c3c", diameter: 2.5, visible: true, fixed: true, labelAt: 2, labelDy: -2 },
+  { key: "ulnar", code: "D", name: "Ulnar artery", kind: "artery", color: "#c0392b", diameter: 2.5, visible: true, fixed: true, labelAt: 2, labelDy: 8 },
   { key: "cephalic", code: "E", name: "Cephalic vein", kind: "vein", color: "#2e86c1", diameter: 3, visible: true, labelAt: 1, labelDy: -10 },
-  { key: "basilic", code: "F", name: "Basilic vein", kind: "vein", color: "#1a5276", diameter: 3.5, visible: true, labelAt: 2, labelDy: 8 },
-  { key: "median", code: "G", name: "Median cubital vein", kind: "vein", color: "#5dade2", diameter: 2.5, visible: true, labelAt: 1, labelDy: -8 },
+  { key: "basilic", code: "F", name: "Basilic vein", kind: "vein", color: "#1a5276", diameter: 3.5, visible: true, fixed: true, labelAt: 2, labelDy: 8 },
+  { key: "median", code: "G", name: "Median cubital vein", kind: "vein", color: "#5dade2", diameter: 2.5, visible: true, fixed: true, labelAt: 1, labelDy: -8 },
   { key: "brachial-vein", code: "H", name: "Brachial vein", kind: "vein", color: "#3498db", diameter: 3.5, visible: false, labelAt: 1, labelDy: 6 },
   { key: "axillary-vein", code: "I", name: "Axillary vein", kind: "vein", color: "#2471a3", diameter: 5, visible: false, labelAt: 0, labelDy: 8 },
   { key: "subclavian", code: "J", name: "Subclavian vein", kind: "vein", color: "#1a365d", diameter: 6, visible: false, labelAt: 0, labelDy: -6 },
@@ -156,6 +156,7 @@ export function createDefaultVessels() {
         kind: spec.kind,
         color: spec.color,
         visible: spec.visible,
+        fixed: Boolean(spec.fixed),
         diameter: spec.diameter,
         style: "normal",
         labelAt: spec.labelAt,
@@ -192,6 +193,8 @@ export function syncCatalog(vessels) {
         existing.color = fresh.color;
       }
       existing.code = fresh.code;
+      existing.fixed = Boolean(fresh.fixed);
+      if (fresh.fixed) existing.visible = true;
       existing.labelAt = fresh.labelAt;
       existing.labelDy = fresh.labelDy;
       result.push(existing);
