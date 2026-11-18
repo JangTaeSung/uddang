@@ -21,6 +21,8 @@ const state = {
   markerType: "borderline",
   paintColor: "#2b2b2b",
   paintSize: 6,
+  paintTool: "pencil",
+  paintMark: "",
   erasing: false,
   selectedVesselId: null,
   selectedPoint: null,
@@ -39,6 +41,12 @@ const MARKERS = {
   thrombosis: { label: "Th", fill: "#c62828" },
   bend: { label: "굽", fill: "#f9a825" },
   branch: { label: "Br", fill: "#2e7d32" },
+};
+
+const PAINT_MARKS = {
+  thrombosis: { color: "#6e1b1b" },
+  consideration: { color: "#b45309" },
+  borderline: { color: "#0e7490" },
 };
 
 for (const id of ["bg-image"]) {
@@ -283,6 +291,7 @@ function insertOnCurve(vessel, hit) {
     ix: b1.x - mid.x,
     iy: b1.y - mid.y,
     w: pointMm(a, vessel) * (1 - t) + pointMm(b, vessel) * t,
+    dash: Boolean(a.dash),
   });
   retargetJunctions(vessel.id, index, t);
   return index + 1;
@@ -304,261 +313,37 @@ function retargetJunctions(parentId, segment, t) {
   }
 }
 
-function ribbonSamples(vessel) {
-  const points = vessel.points;
-  const samples = [];
-  if (points.length < 2) return samples;
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const steps = 10;
-    for (let step = 0; step <= steps; step += 1) {
-      if (step === steps && index < points.length - 2) continue;
-      const t = step / steps;
-      const at = curvePoint(points[index], points[index + 1], t);
-      const mm = pointMm(points[index], vessel) * (1 - t) + pointMm(points[index + 1], vessel) * t;
-      samples.push({ x: at.x, y: at.y, width: pxWidth(mm, vessel) });
-    }
-  }
-  return samples;
+function segmentPath(a, b) {
+  const c2x = b.x + (Number.isFinite(b.ix) ? b.ix : -b.hx);
+  const c2y = b.y + (Number.isFinite(b.iy) ? b.iy : -b.hy);
+  return `M ${a.x} ${a.y} C ${a.x + a.hx} ${a.y + a.hy} ${c2x} ${c2y} ${b.x} ${b.y}`;
 }
 
-function wallWeight(vessel) {
-  return vessel.style === "considerable" ? 2 : 1.6;
-}
-
-function appendWall(parent, points, vessel) {
-  if (points.length < 2) return null;
-  const edge = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-  edge.setAttribute("points", points.map((point) => `${point.x},${point.y}`).join(" "));
-  edge.setAttribute("fill", "none");
-  edge.setAttribute("stroke", displayColor(vessel));
-  edge.setAttribute("stroke-width", String(wallWeight(vessel)));
-  edge.setAttribute("stroke-linecap", "butt");
-  edge.setAttribute("stroke-linejoin", "round");
-  edge.setAttribute("pointer-events", "none");
-  if (vessel.style === "borderline") edge.setAttribute("stroke-opacity", "0.55");
-  parent.append(edge);
-  return edge;
-}
-
-function refreshWall(item, side) {
-  item[`${side}Node`].setAttribute("points", item[side].map((point) => `${point.x},${point.y}`).join(" "));
-}
-
-function moveTip(tip, side, point) {
-  const line = tip.item[side];
-  if (tip.which === "start") line[0] = { x: point.x, y: point.y };
-  else line[line.length - 1] = { x: point.x, y: point.y };
-  refreshWall(tip.item, side);
-}
-
-function wallDir(tip, side) {
-  const line = tip.item[side];
-  const from = tip.which === "start" ? line[0] : line[line.length - 2];
-  const to = tip.which === "start" ? line[1] : line[line.length - 1];
-  const length = Math.hypot(to.x - from.x, to.y - from.y) || 1;
-  return { x: (to.x - from.x) / length, y: (to.y - from.y) / length };
-}
-
-function lineIntersect(origin, direction, other, otherDirection) {
-  const det = direction.x * otherDirection.y - direction.y * otherDirection.x;
-  if (Math.abs(det) < 0.0001) return null;
-  const t = ((other.x - origin.x) * otherDirection.y - (other.y - origin.y) * otherDirection.x) / det;
-  return { x: origin.x + direction.x * t, y: origin.y + direction.y * t };
-}
-
-function meetWalls(tipA, sideA, tipB, sideB) {
-  const a = tipPoint(tipA, sideA);
-  const b = tipPoint(tipB, sideB);
-  const hit = lineIntersect(a, wallDir(tipA, sideA), b, wallDir(tipB, sideB));
-  if (!hit) return false;
-  if (Math.hypot(hit.x - a.x, hit.y - a.y) > 22 || Math.hypot(hit.x - b.x, hit.y - b.y) > 22) return false;
-  moveTip(tipA, sideA, hit);
-  moveTip(tipB, sideB, hit);
-  return true;
-}
-
-function appendJoint(a, b, vessel) {
-  if (Math.hypot(a.x - b.x, a.y - b.y) > 28) return;
-  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-  line.setAttribute("x1", String(a.x));
-  line.setAttribute("y1", String(a.y));
-  line.setAttribute("x2", String(b.x));
-  line.setAttribute("y2", String(b.y));
-  line.setAttribute("stroke", displayColor(vessel));
-  line.setAttribute("stroke-width", String(wallWeight(vessel)));
-  line.setAttribute("stroke-linecap", "round");
-  line.setAttribute("pointer-events", "none");
-  if (vessel.style === "borderline") line.setAttribute("stroke-opacity", "0.55");
-  vesselLayer.append(line);
-}
-
-function appendRibbon(vessel) {
+function appendVessel(vessel) {
   const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-  group.dataset.ribbon = vessel.id;
   group.setAttribute("pointer-events", "none");
-  group.setAttribute("fill", "none");
-  if (vessel.id === state.selectedVesselId) group.setAttribute("filter", "drop-shadow(0 0 1px rgba(0,0,0,.2))");
-  const samples = ribbonSamples(vessel);
-  if (samples.length < 2) {
-    vesselLayer.append(group);
-    return null;
-  }
-  let nx = 0;
-  let ny = -1;
-  const left = [];
-  const right = [];
-  for (let index = 0; index < samples.length; index += 1) {
-    const prev = samples[Math.max(0, index - 1)];
-    const next = samples[Math.min(samples.length - 1, index + 1)];
-    const tx = next.x - prev.x;
-    const ty = next.y - prev.y;
-    const length = Math.hypot(tx, ty);
-    if (length > 0.001) {
-      nx = -ty / length;
-      ny = tx / length;
+  if (vessel.id === state.selectedVesselId) group.setAttribute("filter", "drop-shadow(0 0 1.2px rgba(0,0,0,.4))");
+  for (let index = 0; index < vessel.points.length - 1; index += 1) {
+    const start = vessel.points[index];
+    const end = vessel.points[index + 1];
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    const width = pxWidth((pointMm(start, vessel) + pointMm(end, vessel)) / 2, vessel);
+    path.setAttribute("d", segmentPath(start, end));
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", displayColor(vessel));
+    path.setAttribute("stroke-width", String(width));
+    path.setAttribute("stroke-linecap", start.dash ? "butt" : "round");
+    path.setAttribute("stroke-linejoin", "round");
+    path.setAttribute("pointer-events", "none");
+    if (start.dash) {
+      const dash = Math.max(4, width * 0.8);
+      const gap = Math.max(5, width * 1.15);
+      path.setAttribute("stroke-dasharray", `${dash} ${gap}`);
     }
-    const half = samples[index].width / 2;
-    left.push({ x: samples[index].x + nx * half, y: samples[index].y + ny * half });
-    right.push({ x: samples[index].x - nx * half, y: samples[index].y - ny * half });
+    if (vessel.style === "borderline") path.setAttribute("stroke-opacity", "0.55");
+    group.append(path);
   }
-  const leftNode = appendWall(group, left, vessel);
-  const rightNode = appendWall(group, right, vessel);
   vesselLayer.append(group);
-  const second = samples[1];
-  const penultimate = samples[samples.length - 2];
-  const last = samples[samples.length - 1];
-  return { vessel, left, right, leftNode, rightNode, samples, second, penultimate, last };
-}
-
-function tipPoint(tip, side) {
-  const line = tip.item[side];
-  return tip.which === "start" ? line[0] : line[line.length - 1];
-}
-
-function tipUnit(tip) {
-  const length = Math.hypot(tip.dx, tip.dy) || 1;
-  return { x: tip.dx / length, y: tip.dy / length };
-}
-
-function joinTwoTips(a, b) {
-  const aLeft = tipPoint(a, "left");
-  const aRight = tipPoint(a, "right");
-  const bLeft = tipPoint(b, "left");
-  const bRight = tipPoint(b, "right");
-  const straight = Math.hypot(aLeft.x - bLeft.x, aLeft.y - bLeft.y) + Math.hypot(aRight.x - bRight.x, aRight.y - bRight.y);
-  const crossed = Math.hypot(aLeft.x - bRight.x, aLeft.y - bRight.y) + Math.hypot(aRight.x - bLeft.x, aRight.y - bLeft.y);
-  const vessel = a.item.vessel;
-  if (straight <= crossed) {
-    if (!meetWalls(a, "left", b, "left")) appendJoint(aLeft, bLeft, vessel);
-    if (!meetWalls(a, "right", b, "right")) appendJoint(aRight, bRight, vessel);
-  } else {
-    if (!meetWalls(a, "left", b, "right")) appendJoint(aLeft, bRight, vessel);
-    if (!meetWalls(a, "right", b, "left")) appendJoint(aRight, bLeft, vessel);
-  }
-}
-
-function outerSide(branch, other) {
-  const otherWay = tipUnit(other);
-  const left = tipPoint(branch, "left");
-  const right = tipPoint(branch, "right");
-  const leftToward = (left.x - branch.x) * otherWay.x + (left.y - branch.y) * otherWay.y;
-  const rightToward = (right.x - branch.x) * otherWay.x + (right.y - branch.y) * otherWay.y;
-  return leftToward < rightToward ? "left" : "right";
-}
-
-function joinFork(tips) {
-  let stem = tips[0];
-  let stemScore = Infinity;
-  for (const tip of tips) {
-    const way = tipUnit(tip);
-    let score = 0;
-    for (const other of tips) {
-      if (other === tip) continue;
-      const otherWay = tipUnit(other);
-      score += way.x * otherWay.x + way.y * otherWay.y;
-    }
-    if (score < stemScore) {
-      stemScore = score;
-      stem = tip;
-    }
-  }
-  const arrival = { x: -tipUnit(stem).x, y: -tipUnit(stem).y };
-  const branches = tips.filter((tip) => tip !== stem).sort((a, b) => {
-    const aWay = tipUnit(a);
-    const bWay = tipUnit(b);
-    const aCross = arrival.x * aWay.y - arrival.y * aWay.x;
-    const bCross = arrival.x * bWay.y - arrival.y * bWay.x;
-    return bCross - aCross;
-  });
-  const leftBranch = branches[0];
-  const rightBranch = branches[1];
-  const leftOuter = outerSide(leftBranch, rightBranch);
-  const rightOuter = outerSide(rightBranch, leftBranch);
-  const leftInner = leftOuter === "left" ? "right" : "left";
-  const rightInner = rightOuter === "left" ? "right" : "left";
-  const stemLeft = tipPoint(stem, "left");
-  const stemRight = tipPoint(stem, "right");
-  const outerLeft = tipPoint(leftBranch, leftOuter);
-  const outerRight = tipPoint(rightBranch, rightOuter);
-  const straight = Math.hypot(stemLeft.x - outerLeft.x, stemLeft.y - outerLeft.y) + Math.hypot(stemRight.x - outerRight.x, stemRight.y - outerRight.y);
-  const crossed = Math.hypot(stemLeft.x - outerRight.x, stemLeft.y - outerRight.y) + Math.hypot(stemRight.x - outerLeft.x, stemRight.y - outerLeft.y);
-  const leftMatched = straight <= crossed;
-  if (!(leftMatched ? meetWalls(stem, "left", leftBranch, leftOuter) : meetWalls(stem, "left", rightBranch, rightOuter))) {
-    appendJoint(stemLeft, leftMatched ? outerLeft : outerRight, stem.item.vessel);
-  }
-  if (!(leftMatched ? meetWalls(stem, "right", rightBranch, rightOuter) : meetWalls(stem, "right", leftBranch, leftOuter))) {
-    appendJoint(stemRight, leftMatched ? outerRight : outerLeft, stem.item.vessel);
-  }
-  if (!meetWalls(leftBranch, leftInner, rightBranch, rightInner)) {
-    const innerA = tipPoint(leftBranch, leftInner);
-    const innerB = tipPoint(rightBranch, rightInner);
-    const mid = { x: (innerA.x + innerB.x) / 2, y: (innerA.y + innerB.y) / 2 };
-    appendJoint(innerA, mid, leftBranch.item.vessel);
-    appendJoint(innerB, mid, rightBranch.item.vessel);
-  }
-}
-
-function joinOutlines(items) {
-  const tips = [];
-  for (const item of items) {
-    const first = item.samples[0];
-    tips.push({
-      item,
-      which: "start",
-      x: first.x,
-      y: first.y,
-      dx: item.second.x - first.x,
-      dy: item.second.y - first.y,
-    });
-    tips.push({
-      item,
-      which: "end",
-      x: item.last.x,
-      y: item.last.y,
-      dx: item.penultimate.x - item.last.x,
-      dy: item.penultimate.y - item.last.y,
-    });
-  }
-  const parent = tips.map((_, index) => index);
-  const find = (index) => {
-    if (parent[index] !== index) parent[index] = find(parent[index]);
-    return parent[index];
-  };
-  for (let i = 0; i < tips.length; i += 1) {
-    for (let j = i + 1; j < tips.length; j += 1) {
-      if (Math.hypot(tips[i].x - tips[j].x, tips[i].y - tips[j].y) <= 5) parent[find(i)] = find(j);
-    }
-  }
-  const groups = new Map();
-  tips.forEach((tip, index) => {
-    const key = find(index);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(tip);
-  });
-  for (const group of groups.values()) {
-    if (group.length === 2) joinTwoTips(group[0], group[1]);
-    else if (group.length === 3) joinFork(group);
-  }
 }
 
 function setAllVisible(visible) {
@@ -688,7 +473,6 @@ function renderVessels() {
   vesselLayer.replaceChildren();
   labelLayer.replaceChildren();
   const labels = [];
-  const outlines = [];
   for (const vessel of state.vessels) {
     if (!isShown(vessel)) continue;
     const center = curvePath(vessel.points);
@@ -702,8 +486,7 @@ function renderVessels() {
     hit.dataset.vessel = vessel.id;
     hit.style.cursor = state.mode === "paint" ? "crosshair" : "grab";
     vesselLayer.append(hit);
-    const outline = appendRibbon(vessel);
-    if (outline) outlines.push(outline);
+    appendVessel(vessel);
     const anchorIndex = Math.min(Math.max(vessel.labelAt ?? 1, 0), vessel.points.length - 1);
     const anchor = vessel.points[anchorIndex];
     if (vessel.parentId) {
@@ -774,7 +557,64 @@ function renderVessels() {
       labelLayer.insertBefore(leader, text);
     }
   }
-  joinOutlines(outlines);
+  renderDiameterLabels();
+}
+
+function formatMm(value) {
+  const rounded = Math.round(mmWidth(value) * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+function defaultDiameterSpot(vessel, index) {
+  const point = vessel.points[index];
+  const tangent = tangentAtPoint(vessel, index);
+  const length = Math.hypot(tangent.x, tangent.y) || 1;
+  const nx = -tangent.y / length;
+  const ny = tangent.x / length;
+  const gap = pxWidth(pointMm(point, vessel), vessel) / 2 + 8;
+  const toward = vessel.side === "lt" ? 1 : -1;
+  const sign = nx * toward >= 0 ? 1 : -1;
+  const dx = nx * sign;
+  return {
+    x: point.x + dx * gap,
+    y: point.y + ny * sign * gap + 3,
+    anchor: dx >= 0 ? "start" : "end",
+  };
+}
+
+function renderDiameterLabels() {
+  for (const vessel of state.vessels) {
+    if (!isShown(vessel)) continue;
+    vessel.points.forEach((point, index) => {
+      const spot = point.diameterLabel;
+      if (!spot || !Number.isFinite(spot.x) || !Number.isFinite(spot.y)) return;
+      const leader = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      leader.dataset.diameterLeader = vessel.id;
+      leader.dataset.index = String(index);
+      leader.setAttribute("x1", String(point.x));
+      leader.setAttribute("y1", String(point.y));
+      leader.setAttribute("x2", String(spot.anchor === "start" ? spot.x - 2 : spot.x + 2));
+      leader.setAttribute("y2", String(spot.y - 3));
+      leader.setAttribute("stroke", "#a8a29e");
+      leader.setAttribute("stroke-width", "0.6");
+      leader.setAttribute("pointer-events", "none");
+      const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      text.setAttribute("x", String(spot.x));
+      text.setAttribute("y", String(spot.y));
+      text.setAttribute("text-anchor", spot.anchor === "start" ? "start" : "end");
+      text.setAttribute("font-size", "9");
+      text.setAttribute("font-weight", "700");
+      text.setAttribute("fill", "#292524");
+      text.setAttribute("stroke", "#fffdf8");
+      text.setAttribute("stroke-width", "2.5");
+      text.setAttribute("paint-order", "stroke");
+      text.dataset.diameter = vessel.id;
+      text.dataset.index = String(index);
+      text.style.cursor = "grab";
+      text.textContent = `${formatMm(pointMm(point, vessel))}mm`;
+      labelLayer.append(leader, text);
+    });
+  }
 }
 
 function pencilJitter(index, salt) {
@@ -791,6 +631,10 @@ function renderPaint() {
   ];
   for (const stroke of state.paint) {
     if (!stroke.points || stroke.points.length < 2) continue;
+    if (stroke.tool === "highlighter") {
+      appendHighlighter(stroke);
+      continue;
+    }
     const size = Math.max(1.6, stroke.size || 6);
     const color = stroke.color || "#2b2b2b";
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -850,6 +694,29 @@ function renderPaint() {
     }
     paintLayer.append(group);
   }
+}
+
+function appendHighlighter(stroke) {
+  const size = Math.max(8, (stroke.size || 6) * 2.2);
+  const color = stroke.color || "#f5e642";
+  const d = stroke.points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+  const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  group.setAttribute("pointer-events", "none");
+  for (const layer of [
+    { width: size * 1.35, opacity: 0.18 },
+    { width: size, opacity: 0.42 },
+  ]) {
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", d);
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", color);
+    path.setAttribute("stroke-width", String(layer.width));
+    path.setAttribute("stroke-opacity", String(layer.opacity));
+    path.setAttribute("stroke-linecap", "round");
+    path.setAttribute("stroke-linejoin", "round");
+    group.append(path);
+  }
+  paintLayer.append(group);
 }
 
 function renderMarkers() {
@@ -981,25 +848,40 @@ function renderInspector() {
   document.querySelector("#delete-branch").hidden = !vessel?.parentId;
   document.querySelector("#reset-vessel").hidden = Boolean(vessel?.parentId);
   const pointWidthField = document.querySelector("#point-width-field");
+  const dashField = document.querySelector("#segment-dash-field");
+  const diameterField = document.querySelector("#diameter-label-field");
   const selected = vessel && state.selectedPoint != null ? vessel.points[state.selectedPoint] : null;
+  const hasNext = Boolean(selected && state.selectedPoint < vessel.points.length - 1);
   pointWidthField.hidden = !selected;
+  dashField.hidden = !hasNext;
+  diameterField.hidden = !selected;
+  const drawing = state.mode === "paint";
+  const drawName = state.paintTool === "highlighter" ? "형광펜" : "연필";
+  const drawHint = state.paintTool === "highlighter"
+    ? "형광펜은 넓고 옅게 칠합니다. Thrombosis, Consideration, Borderline 색으로 구분하고, 지우개로 지웁니다."
+    : "연필은 흑연처럼 긋습니다. Thrombosis, Consideration, Borderline 색으로 구분하고, 지우개로 지웁니다.";
   if (vessel) {
     const parent = vesselById(vessel.parentId);
     title.textContent = `${vessel.sideName} ${vessel.name}`;
-    if (state.mode === "paint") {
-      hint.textContent = "연필로 긋습니다. 색을 바꾸면 다음 선부터 적용되고, 지우개로 지웁니다.";
+    if (drawing) {
+      hint.textContent = drawHint;
     } else if (parent) {
-      hint.textContent = `${parent.name}에서 나온 가지입니다. 선을 끌면 구부러지고, 시작 점은 그 혈관을 따라 움직입니다.`;
+      hint.textContent = `${parent.name}에서 나온 가지입니다. 선을 끌면 구부러지고, 시작 점은 그 혈관을 따라 움직입니다. 점을 고르면 다음 구간을 실선이나 점선으로 바꿉니다.`;
     } else {
-      hint.textContent = "선을 끌면 그 부분이 구부러집니다. 클릭하면 가지 추가가 뜨고, 그 버튼을 누른 채 끌면 가지가 나갑니다. 색 막대를 끌면 그 지점만 굵어집니다.";
+      hint.textContent = "선을 끌면 그 부분이 구부러집니다. 점을 고르면 다음 구간을 실선이나 점선으로 바꾸고, 그 지점의 직경 숫자를 옆에 켤 수 있습니다.";
     }
+    document.querySelector("#toggle-diameters").textContent = vessel.points.every((point) => point.diameterLabel) ? "직경 숫자 숨기기" : "구간 직경 표시";
     if (!editingField) {
       document.querySelector("#field-name").value = vessel.name;
       document.querySelector("#field-diameter").value = String(vessel.diameter);
       document.querySelector("#field-color").value = vessel.color;
       document.querySelector("#field-style").value = vessel.style || "normal";
       document.querySelector("#field-visible").checked = vessel.visible;
-      if (selected) document.querySelector("#field-point-width").value = String(pointMm(selected, vessel));
+      if (selected) {
+        document.querySelector("#field-point-width").value = String(pointMm(selected, vessel));
+        document.querySelector("#field-diameter-label").checked = Boolean(selected.diameterLabel);
+      }
+      if (hasNext) document.querySelector("#field-segment-dash").value = selected.dash ? "dashed" : "solid";
     }
   } else if (marker) {
     const spec = MARKERS[marker.type] || MARKERS.borderline;
@@ -1007,16 +889,20 @@ function renderInspector() {
     hint.textContent = "표식을 끌어 옮기거나 메모를 적습니다.";
     if (!editingField) document.querySelector("#field-note").value = marker.note || "";
   } else {
-    title.textContent = state.mode === "paint" ? "연필" : "혈관을 선택하세요";
-    hint.textContent = state.mode === "paint"
-      ? "연필로 긋습니다. 색을 바꾸면 다음 선부터 적용되고, 지우개로 지웁니다."
+    title.textContent = drawing ? drawName : "혈관을 선택하세요";
+    hint.textContent = drawing
+      ? drawHint
       : "주요 동맥과 얕은 정맥이 켜져 있습니다. 선을 끌면 구부러지고, 클릭하면 그 자리에 가지 추가가 뜹니다. 깊은 정맥은 왼쪽에서 켭니다.";
   }
   document.querySelector("#mode-path").classList.toggle("active", state.mode === "path");
-  document.querySelector("#mode-paint").classList.toggle("active", state.mode === "paint");
+  document.querySelector("#mode-paint").classList.toggle("active", drawing && state.paintTool !== "highlighter");
+  document.querySelector("#mode-highlight").classList.toggle("active", drawing && state.paintTool === "highlighter");
   document.querySelector("#mode-marker").classList.toggle("active", state.mode === "marker");
-  document.querySelector("#paint-tools").hidden = state.mode !== "paint";
-  svg.classList.toggle("paint-mode", state.mode === "paint");
+  document.querySelector("#paint-tools").hidden = !drawing;
+  document.querySelectorAll(".paint-mark").forEach((button) => {
+    button.classList.toggle("active", button.dataset.mark === state.paintMark);
+  });
+  svg.classList.toggle("paint-mode", drawing);
   document.querySelector("#paint-erase").classList.toggle("active", state.erasing);
   document.querySelector("#marker-type").disabled = state.mode !== "marker";
   document.querySelector("#marker-type").value = state.markerType;
@@ -1083,6 +969,19 @@ function onPointerDown(event) {
     if (svg.contains(labelHit)) svg.setPointerCapture(event.pointerId);
     return;
   }
+  const diameterHit = target.closest?.("[data-diameter]");
+  if (diameterHit) {
+    drag = {
+      kind: "diameter",
+      id: diameterHit.dataset.diameter,
+      index: Number(diameterHit.dataset.index),
+      dx: point.x - Number(diameterHit.getAttribute("x")),
+      dy: point.y - Number(diameterHit.getAttribute("y")),
+    };
+    diameterHit.style.cursor = "grabbing";
+    if (svg.contains(diameterHit)) svg.setPointerCapture(event.pointerId);
+    return;
+  }
   if (state.mode === "paint" && (event.target === svg || svg.contains(event.target))) {
     if (state.erasing) {
       drag = { kind: "erase" };
@@ -1092,6 +991,8 @@ function onPointerDown(event) {
         id: `p-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`,
         color: state.paintColor,
         size: state.paintSize,
+        tool: state.paintTool === "highlighter" ? "highlighter" : "pencil",
+        mark: state.paintMark || "",
         points: [point],
       };
       state.paint.push(stroke);
@@ -1164,6 +1065,24 @@ function onPointerMove(event) {
     text.setAttribute("y", String(y));
     const anchorIsEnd = text.getAttribute("text-anchor") === "end";
     leader.setAttribute("x2", String(anchorIsEnd ? x + 3 : x - 3));
+    leader.setAttribute("y2", String(y - 3));
+    return;
+  }
+  if (drag.kind === "diameter") {
+    const point = svgPoint(event);
+    const vessel = vesselById(drag.id);
+    const anchor = vessel?.points[drag.index];
+    const text = labelLayer.querySelector(`[data-diameter="${drag.id}"][data-index="${drag.index}"]`);
+    const leader = labelLayer.querySelector(`[data-diameter-leader="${drag.id}"][data-index="${drag.index}"]`);
+    if (!anchor?.diameterLabel || !text || !leader) return;
+    const x = point.x - drag.dx;
+    const y = point.y - drag.dy;
+    anchor.diameterLabel.x = x;
+    anchor.diameterLabel.y = y;
+    text.setAttribute("x", String(x));
+    text.setAttribute("y", String(y));
+    const anchorIsEnd = text.getAttribute("text-anchor") !== "start";
+    leader.setAttribute("x2", String(anchorIsEnd ? x + 2 : x - 2));
     leader.setAttribute("y2", String(y - 3));
     return;
   }
@@ -1319,7 +1238,16 @@ document.querySelector("#mode-path").addEventListener("click", () => {
 });
 document.querySelector("#mode-paint").addEventListener("click", () => {
   state.mode = "paint";
+  state.paintTool = "pencil";
   state.selectedMarkerId = null;
+  hideCursorMenu();
+  render();
+});
+document.querySelector("#mode-highlight").addEventListener("click", () => {
+  state.mode = "paint";
+  state.paintTool = "highlighter";
+  state.selectedMarkerId = null;
+  state.erasing = false;
   hideCursorMenu();
   render();
 });
@@ -1365,6 +1293,29 @@ document.querySelector("#field-point-width").addEventListener("input", (event) =
   const point = vessel?.points[state.selectedPoint];
   if (!point) return;
   point.w = Math.min(40, Math.max(0.4, Number(event.target.value) || 0.4));
+  commit();
+});
+document.querySelector("#field-segment-dash").addEventListener("change", (event) => {
+  const vessel = vesselById(state.selectedVesselId);
+  const point = vessel?.points[state.selectedPoint];
+  if (!point || state.selectedPoint >= vessel.points.length - 1) return;
+  point.dash = event.target.value === "dashed";
+  commit();
+});
+document.querySelector("#field-diameter-label").addEventListener("change", (event) => {
+  const vessel = vesselById(state.selectedVesselId);
+  const point = vessel?.points[state.selectedPoint];
+  if (!point) return;
+  point.diameterLabel = event.target.checked ? defaultDiameterSpot(vessel, state.selectedPoint) : null;
+  commit();
+});
+document.querySelector("#toggle-diameters").addEventListener("click", () => {
+  const vessel = vesselById(state.selectedVesselId);
+  if (!vessel) return;
+  const allOn = vessel.points.every((point) => point.diameterLabel);
+  vessel.points.forEach((point, index) => {
+    point.diameterLabel = allOn ? null : (point.diameterLabel || defaultDiameterSpot(vessel, index));
+  });
   commit();
 });
 document.querySelector("#field-color").addEventListener("input", (event) => {
@@ -1575,19 +1526,21 @@ svg.addEventListener("pointerdown", onPointerDown);
 window.addEventListener("pointermove", onPointerMove);
 window.addEventListener("pointerup", onPointerUp);
 window.addEventListener("pointercancel", onPointerUp);
-document.querySelectorAll(".paint-color").forEach((button) => {
+document.querySelectorAll(".paint-mark").forEach((button) => {
   button.addEventListener("click", () => {
-    state.paintColor = button.dataset.color;
+    const mark = PAINT_MARKS[button.dataset.mark];
+    if (!mark) return;
+    state.paintMark = button.dataset.mark;
+    state.paintColor = mark.color;
     state.erasing = false;
-    document.querySelector("#paint-color").value = state.paintColor;
-    document.querySelectorAll(".paint-color").forEach((item) => item.classList.toggle("active-color", item === button));
+    document.querySelector("#paint-color").value = mark.color;
     renderInspector();
   });
 });
 document.querySelector("#paint-color").addEventListener("input", (event) => {
   state.paintColor = event.target.value;
+  state.paintMark = "";
   state.erasing = false;
-  document.querySelectorAll(".paint-color").forEach((item) => item.classList.remove("active-color"));
   renderInspector();
 });
 document.querySelector("#paint-size").addEventListener("input", (event) => {
@@ -1612,7 +1565,6 @@ document.querySelector("#paint-erase").addEventListener("click", () => {
   state.erasing = !state.erasing;
   renderInspector();
 });
-document.querySelector(".paint-color").classList.add("active-color");
 
 history.push(snapshot());
 historyIndex = 0;
