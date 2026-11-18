@@ -242,8 +242,11 @@ function pointMm(point, vessel) {
   return mmWidth(point?.w ?? vessel.diameter);
 }
 
+const STROKE_PX_PER_MM = 1.2;
+const STROKE_MIN_PX = 2.8;
+
 function pxWidth(mm, vessel) {
-  let width = Math.max(5, mmWidth(mm) * 2.4);
+  let width = Math.max(STROKE_MIN_PX, mmWidth(mm) * STROKE_PX_PER_MM);
   if (vessel?.style === "considerable") width *= 1.35;
   if (vessel?.style === "borderline") width *= 0.8;
   return width;
@@ -1142,8 +1145,8 @@ function onPointerMove(event) {
   if (!vessel || !anchor) return;
   if (drag.kind === "width") {
     const scale = vessel.style === "considerable" ? 1.35 : vessel.style === "borderline" ? 0.8 : 1;
-    const half = Math.max(0.6, Math.hypot(point.x - anchor.x, point.y - anchor.y) - 16);
-    anchor.w = Math.round(Math.min(40, Math.max(0.4, (half * 2) / (1.05 * scale))) * 10) / 10;
+    const half = Math.max(STROKE_MIN_PX / 2, Math.hypot(point.x - anchor.x, point.y - anchor.y) - 16);
+    anchor.w = Math.round(Math.min(40, Math.max(0.4, (half * 2) / (STROKE_PX_PER_MM * scale))) * 10) / 10;
   } else if (drag.kind === "anchor") {
     moveAnchor(vessel, drag.index, point);
     if (drag.pulling) aimOutward(vessel);
